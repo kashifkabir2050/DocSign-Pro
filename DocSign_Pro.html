@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DocSign Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161e;
+    --surface2: #1e1e2a;
+    --surface3: #252535;
+    --border: #2e2e42;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e8a0;
+    --text: #e8e8f0;
+    --text2: #9090a8;
+    --text3: #5a5a72;
+    --shadow: 0 8px 32px rgba(0,0,0,0.4);
+    --radius: 12px;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  
+  html, body { 
+    height:100%; 
+    background:var(--bg); 
+    color:var(--text); 
+    font-family:'DM Sans', sans-serif;
+    overflow:hidden;
+  }
+
+  /* ── LAYOUT ── */
+  #app { display:flex; flex-direction:column; height:100vh; }
+
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 20px;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    z-index:100;
+    flex-shrink:0;
+  }
+
+  .logo { 
+    font-family:'Syne',sans-serif; font-weight:800; font-size:20px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    letter-spacing:-0.5px;
+  }
+  .logo span { font-weight:400; }
+
+  .header-actions { display:flex; gap:8px; }
+
+  .main-area { display:flex; flex:1; overflow:hidden; }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    width:280px; 
+    background:var(--surface);
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+    overflow-y:auto;
+    flex-shrink:0;
+    transition:transform 0.3s ease;
+  }
+
+  .sidebar-section { padding:16px; border-bottom:1px solid var(--border); }
+  .sidebar-label {
+    font-family:'Syne',sans-serif; font-size:10px; font-weight:700;
+    letter-spacing:2px; text-transform:uppercase; color:var(--text3);
+    margin-bottom:10px;
+  }
+
+  /* ── CANVAS AREA ── */
+  #canvas-area {
+    flex:1; overflow:auto; 
+    display:flex; align-items:flex-start; justify-content:center;
+    background: radial-gradient(ellipse at 50% 0%, #1a1a2e 0%, var(--bg) 70%);
+    padding:20px;
+    position:relative;
+  }
+
+  #doc-canvas-wrapper {
+    position:relative;
+    display:none;
+    box-shadow:0 0 0 1px var(--border), var(--shadow), 0 0 80px rgba(108,99,255,0.1);
+    border-radius:4px;
+    overflow:visible;
+  }
+
+  #doc-canvas { display:block; }
+
+  /* overlays rendered on top */
+  #overlay-layer {
+    position:absolute; top:0; left:0;
+    pointer-events:none;
+    width:100%; height:100%;
+  }
+
+  /* ── UPLOAD ZONE ── */
+  #upload-zone {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; text-align:center;
+    width:100%; min-height:400px;
+    border:2px dashed var(--border);
+    border-radius:20px;
+    padding:40px;
+    cursor:pointer;
+    transition:all 0.3s;
+    background:var(--surface2);
+  }
+  #upload-zone:hover, #upload-zone.drag-over {
+    border-color:var(--accent);
+    background:rgba(108,99,255,0.06);
+  }
+  #upload-zone svg { opacity:0.4; }
+  #upload-zone h2 { font-family:'Syne',sans-serif; font-size:22px; font-weight:700; }
+  #upload-zone p { color:var(--text2); font-size:14px; line-height:1.6; }
+  #file-input { display:none; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:8px 14px; border-radius:8px; border:none;
+    font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500;
+    cursor:pointer; transition:all 0.2s; white-space:nowrap;
+  }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:#7c75ff; transform:translateY(-1px); }
+  .btn-secondary { background:var(--surface3); color:var(--text); border:1px solid var(--border); }
+  .btn-secondary:hover { background:var(--border); }
+  .btn-success { background:var(--accent3); color:#0e0e12; font-weight:600; }
+  .btn-success:hover { filter:brightness(1.1); transform:translateY(-1px); }
+  .btn-danger { background:#ff4466; color:#fff; }
+  .btn-danger:hover { background:#ff2255; }
+  .btn-sm { padding:5px 10px; font-size:12px; border-radius:6px; }
+  .btn-icon { width:34px; height:34px; padding:0; justify-content:center; border-radius:8px; }
+  .btn:active { transform:scale(0.96) !important; }
+
+  /* ── TOOL BUTTONS ── */
+  .tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .tool-btn {
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:4px; padding:10px 8px; border-radius:10px;
+    background:var(--surface2); border:1px solid var(--border);
+    color:var(--text2); cursor:pointer; transition:all 0.2s;
+    font-size:11px; font-weight:500;
+  }
+  .tool-btn:hover { border-color:var(--accent); color:var(--text); }
+  .tool-btn.active { background:rgba(108,99,255,0.15); border-color:var(--accent); color:var(--accent); }
+  .tool-btn svg { width:20px; height:20px; }
+
+  /* ── SIGNATURE PAD ── */
+  #sig-panel {
+    display:none; position:fixed; inset:0; z-index:200;
+    background:rgba(0,0,0,0.7); backdrop-filter:blur(8px);
+    align-items:center; justify-content:center; padding:20px;
+  }
+  #sig-panel.open { display:flex; }
+  .sig-modal {
+    background:var(--surface); border-radius:20px; border:1px solid var(--border);
+    padding:24px; width:100%; max-width:560px;
+    box-shadow:var(--shadow);
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .sig-modal h3 { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; }
+  .tab-bar { display:flex; gap:4px; background:var(--surface2); border-radius:10px; padding:4px; }
+  .tab-btn {
+    flex:1; padding:8px; border-radius:7px; border:none;
+    background:transparent; color:var(--text2); cursor:pointer;
+    font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500;
+    transition:all 0.2s;
+  }
+  .tab-btn.active { background:var(--accent); color:#fff; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  #sig-canvas {
+    width:100%; height:180px; border-radius:10px;
+    background:#ffffff; border:1px solid var(--border);
+    cursor:crosshair; touch-action:none; display:block;
+  }
+
+  /* Signature color swatches */
+  .sig-color-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .sig-color-swatch {
+    width:22px; height:22px; border-radius:50%; cursor:pointer;
+    border:2px solid transparent; transition:all 0.2s; flex-shrink:0;
+  }
+  .sig-color-swatch.active { border-color:#6c63ff; transform:scale(1.25); }
+  .sig-color-label { font-size:12px; color:var(--text2); margin-right:4px; }
+
+  .sig-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+  /* scan upload */
+  #scan-drop {
+    border:2px dashed var(--border); border-radius:10px;
+    padding:32px; text-align:center; cursor:pointer;
+    transition:all 0.2s; color:var(--text2); font-size:14px;
+  }
+  #scan-drop:hover { border-color:var(--accent); color:var(--text); }
+  #scan-input { display:none; }
+  #scan-preview { max-width:100%; max-height:180px; border-radius:8px; display:none; margin:0 auto; }
+
+  /* ── ANNOTATIONS on canvas ── */
+  .annotation {
+    position:absolute; cursor:move;
+    user-select:none; touch-action:none;
+  }
+  .annotation .delete-handle {
+    position:absolute; top:-10px; right:-10px;
+    width:20px; height:20px; border-radius:50%;
+    background:#ff4466; border:none; color:#fff;
+    font-size:12px; cursor:pointer; display:flex;
+    align-items:center; justify-content:center;
+    opacity:0; transition:opacity 0.2s; z-index:10;
+  }
+  .annotation:hover .delete-handle { opacity:1; }
+  .annotation .resize-handle {
+    position:absolute; bottom:-6px; right:-6px;
+    width:14px; height:14px; border-radius:3px;
+    background:var(--accent); cursor:nwse-resize;
+    opacity:0; transition:opacity 0.2s;
+  }
+  .annotation:hover .resize-handle { opacity:1; }
+
+  /* stamp style */
+  .stamp-text {
+    font-family:'Syne',sans-serif; font-weight:800;
+    border:3px solid currentColor; border-radius:8px;
+    padding:6px 14px; letter-spacing:2px; text-transform:uppercase;
+    opacity:0.85; white-space:nowrap; font-size:22px;
+    transform:rotate(-12deg); display:inline-block;
+  }
+  .stamp-approved { color:#43e8a0; }
+  .stamp-rejected { color:#ff4466; }
+  .stamp-review { color:#ffd166; }
+  .stamp-confidential { color:#6c63ff; }
+
+  /* note style */
+  .note-box {
+    background:rgba(255,213,0,0.10); border:1.5px solid rgba(255,213,0,0.4);
+    border-radius:8px; padding:10px 12px; min-width:140px; min-height:50px;
+    font-size:13px; line-height:1.5;
+    font-family:'DM Sans',sans-serif; max-width:260px;
+  }
+  .note-input {
+    background:transparent; border:none; outline:none; width:100%;
+    color:inherit; font:inherit; resize:none; min-height:40px;
+  }
+
+  /* date style */
+  .date-label {
+    font-family:'DM Mono',monospace; font-size:13px;
+    color:#1a1a8c; background:rgba(26,26,140,0.08);
+    border:2px solid rgba(26,26,140,0.35);
+    border-radius:6px; padding:4px 10px; white-space:nowrap;
+  }
+
+  /* ── COLOR PICKER ROWS (note/date) ── */
+  .ann-color-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:2px; }
+  .ann-color-swatch {
+    width:22px; height:22px; border-radius:50%; cursor:pointer;
+    border:2px solid transparent; transition:all 0.2s; flex-shrink:0;
+  }
+  .ann-color-swatch.active { border-color:#fff; transform:scale(1.25); box-shadow:0 0 0 1px #6c63ff; }
+  .ann-color-label { font-size:12px; color:var(--text2); margin-right:2px; }
+
+  /* ── TEXT NOTE MODAL ── */
+  #note-panel {
+    display:none; position:fixed; inset:0; z-index:200;
+    background:rgba(0,0,0,0.6); backdrop-filter:blur(6px);
+    align-items:center; justify-content:center; padding:20px;
+  }
+  #note-panel.open { display:flex; }
+  .note-modal {
+    background:var(--surface); border-radius:16px; border:1px solid var(--border);
+    padding:20px; width:100%; max-width:400px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .note-modal h3 { font-family:'Syne',sans-serif; font-weight:700; }
+  #note-textarea {
+    width:100%; height:100px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; padding:10px; color:var(--text);
+    font-family:'DM Sans',sans-serif; font-size:14px; resize:vertical; outline:none;
+  }
+  #note-textarea:focus { border-color:var(--accent); }
+
+  /* ── STAMP GRID ── */
+  .stamp-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .stamp-option {
+    padding:8px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface2); cursor:pointer; text-align:center;
+    transition:all 0.2s; font-size:11px; font-weight:600;
+    font-family:'Syne',sans-serif; letter-spacing:1px;
+  }
+  .stamp-option:hover { transform:scale(1.03); border-color:currentColor; }
+
+  /* ── PROGRESS ── */
+  #page-nav { display:flex; align-items:center; gap:8px; }
+  #page-nav span { font-size:13px; color:var(--text2); font-family:'DM Mono',monospace; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+  /* ── MOBILE SIDEBAR TOGGLE ── */
+  #sidebar-toggle { display:none; }
+  #sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:149; }
+
+  /* ── COLOR PICKER ── */
+  .color-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .color-swatch {
+    width:22px; height:22px; border-radius:50%; cursor:pointer;
+    border:2px solid transparent; transition:all 0.2s; flex-shrink:0;
+  }
+  .color-swatch.active { border-color:#fff; transform:scale(1.2); }
+
+  /* ── RANGE ── */
+  input[type=range] { 
+    -webkit-appearance:none; width:100%; height:4px;
+    background:var(--border); border-radius:2px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:14px;
+    border-radius:50%; background:var(--accent); cursor:pointer;
+  }
+  .range-row { display:flex; align-items:center; gap:10px; }
+  .range-row label { font-size:12px; color:var(--text2); width:60px; flex-shrink:0; }
+  .range-val { font-size:12px; font-family:'DM Mono',monospace; color:var(--text3); width:30px; text-align:right; }
+
+  /* ── TOAST ── */
+  #toast {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:var(--surface3); border:1px solid var(--border);
+    border-radius:10px; padding:10px 18px;
+    font-size:13px; color:var(--text);
+    box-shadow:var(--shadow); z-index:999;
+    transition:transform 0.3s ease;
+    pointer-events:none;
+  }
+  #toast.show { transform:translateX(-50%) translateY(0); }
+
+  /* ── LOADING ── */
+  #loading {
+    position:fixed; inset:0; background:rgba(14,14,18,0.85);
+    display:none; align-items:center; justify-content:center;
+    flex-direction:column; gap:16px; z-index:500;
+  }
+  #loading.show { display:flex; }
+  .spinner {
+    width:40px; height:40px; border:3px solid var(--border);
+    border-top-color:var(--accent); border-radius:50%;
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    #sidebar {
+      position:fixed; top:0; left:0; bottom:0; z-index:150;
+      transform:translateX(-100%);
+      width:260px;
+    }
+    #sidebar.open { transform:translateX(0); }
+    #sidebar-overlay.show { display:block; }
+    #sidebar-toggle { display:flex; }
+    .logo { font-size:17px; }
+  }
+
+  /* sig img on doc */
+  .sig-img { max-width:100%; max-height:100%; object-fit:contain; pointer-events:none; }
+
+  /* page divider */
+  .page-divider {
+    position:absolute; left:0; right:0; height:4px;
+    background:var(--bg); pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- HEADER -->
+  <header>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="btn btn-secondary btn-icon" id="sidebar-toggle" onclick="toggleSidebar()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <div class="logo">DocSign <span>Pro</span></div>
+    </div>
+    <div id="page-nav" style="display:none">
+      <button class="btn btn-secondary btn-sm" onclick="prevPage()">‹</button>
+      <span id="page-info">1 / 1</span>
+      <button class="btn btn-secondary btn-sm" onclick="nextPage()">›</button>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" id="clear-btn" onclick="clearAll()" style="display:none">Clear All</button>
+      <button class="btn btn-success" id="download-btn" onclick="downloadDoc()" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Save & Download
+      </button>
+    </div>
+  </header>
+
+  <div class="main-area">
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <!-- Upload new -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Document</div>
+        <button class="btn btn-primary" style="width:100%" onclick="document.getElementById('file-input').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload File
+        </button>
+        <input type="file" id="file-input" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.bmp,.webp,.tiff,.tif" onchange="handleFile(this)">
+      </div>
+
+      <!-- Tools -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Add Elements</div>
+        <div class="tool-grid">
+          <div class="tool-btn" onclick="openSigPanel()" title="Add Signature">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17c3.333-4 6-7 7-7s2 2 3 2 3-2 5-5"/><path d="M21 17H3"/></svg>
+            Signature
+          </div>
+          <div class="tool-btn" onclick="addDate()" title="Add Date">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Date
+          </div>
+          <div class="tool-btn" onclick="openNotePanel()" title="Add Note">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Note
+          </div>
+          <div class="tool-btn" onclick="toggleStampPanel()" title="Add Stamp" id="stamp-tool">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0112 0v2"/><line x1="4" y1="22" x2="20" y2="22"/></svg>
+            Stamp
+          </div>
+        </div>
+        <!-- Date color picker -->
+        <div style="margin-top:10px">
+          <div style="font-size:11px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Date Color</div>
+          <div class="ann-color-row" id="date-color-row">
+            <div class="ann-color-swatch active" style="background:#1a1a8c" data-color="#1a1a8c" onclick="setDateColor(this)" title="Navy"></div>
+            <div class="ann-color-swatch" style="background:#000000" data-color="#000000" onclick="setDateColor(this)" title="Black"></div>
+            <div class="ann-color-swatch" style="background:#8b0000" data-color="#8b0000" onclick="setDateColor(this)" title="Dark Red"></div>
+            <div class="ann-color-swatch" style="background:#0a5c2a" data-color="#0a5c2a" onclick="setDateColor(this)" title="Dark Green"></div>
+            <div class="ann-color-swatch" style="background:#6c63ff" data-color="#6c63ff" onclick="setDateColor(this)" title="Purple"></div>
+            <div class="ann-color-swatch" style="background:#b8860b" data-color="#b8860b" onclick="setDateColor(this)" title="Gold"></div>
+            <input type="color" id="date-custom-color" value="#1a1a8c" title="Custom color"
+              style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border);padding:0;cursor:pointer;"
+              oninput="setDateColorCustom(this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- Stamp options (hidden by default) -->
+      <div class="sidebar-section" id="stamp-section" style="display:none">
+        <div class="sidebar-label">Stamp Type</div>
+        <div class="stamp-grid">
+          <div class="stamp-option" style="color:#43e8a0" onclick="addStamp('APPROVED','stamp-approved')">✓ APPROVED</div>
+          <div class="stamp-option" style="color:#ff4466" onclick="addStamp('REJECTED','stamp-rejected')">✗ REJECTED</div>
+          <div class="stamp-option" style="color:#ffd166" onclick="addStamp('REVIEW','stamp-review')">⚑ REVIEW</div>
+          <div class="stamp-option" style="color:#6c63ff" onclick="addStamp('CONFIDENTIAL','stamp-confidential')">⬡ CONFIDENTIAL</div>
+          <div class="stamp-option" style="color:#ff9f43" onclick="addStamp('PENDING','stamp-review')">◷ PENDING</div>
+          <div class="stamp-option" style="color:#74b9ff" onclick="addStamp('VERIFIED','stamp-approved')">◉ VERIFIED</div>
+        </div>
+      </div>
+
+      <!-- Draw tool -->
+      <div class="sidebar-section">
+        <div class="sidebar-label">Draw / Annotate</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <div class="tool-btn" id="draw-tool" onclick="toggleDraw()" style="flex:1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Draw
+          </div>
+          <div class="tool-btn" id="erase-tool" onclick="toggleErase()" style="flex:1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M20 20H7L3 16l10.7-10.7a1 1 0 011.4 0l5.6 5.6a1 1 0 010 1.4z"/><line x1="6.1" y1="17.9" x2="13" y2="11"/></svg>
+            Erase
+          </div>
+        </div>
+        <div class="color-row" id="color-row">
+          <div class="color-swatch active" style="background:#e8e8f0" data-color="#e8e8f0" onclick="setColor(this)"></div>
+          <div class="color-swatch" style="background:#ff4466" data-color="#ff4466" onclick="setColor(this)"></div>
+          <div class="color-swatch" style="background:#43e8a0" data-color="#43e8a0" onclick="setColor(this)"></div>
+          <div class="color-swatch" style="background:#ffd166" data-color="#ffd166" onclick="setColor(this)"></div>
+          <div class="color-swatch" style="background:#6c63ff" data-color="#6c63ff" onclick="setColor(this)"></div>
+          <div class="color-swatch" style="background:#74b9ff" data-color="#74b9ff" onclick="setColor(this)"></div>
+          <div class="color-swatch" style="background:#ff9f43" data-color="#ff9f43" onclick="setColor(this)"></div>
+        </div>
+        <div style="margin-top:10px">
+          <div class="range-row">
+            <label>Size</label>
+            <input type="range" min="1" max="20" value="3" id="brush-size" oninput="updateBrushSize(this)">
+            <span class="range-val" id="brush-val">3</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Instructions -->
+      <div class="sidebar-section" style="margin-top:auto">
+        <div class="sidebar-label">How to use</div>
+        <ul style="font-size:12px;color:var(--text2);line-height:1.8;padding-left:16px">
+          <li>Upload any PDF, image, or document</li>
+          <li>Draw signature on pad or scan it</li>
+          <li>Drag & resize elements freely</li>
+          <li>Add stamps, notes, date</li>
+          <li>Download flattened copy</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- MAIN CANVAS -->
+    <div id="canvas-area">
+      <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+      <!-- Upload zone (shown when no doc) -->
+      <div id="upload-zone" onclick="document.getElementById('file-input').click()" 
+           ondragover="e => {e.preventDefault(); this.classList.add('drag-over')}"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <rect width="64" height="64" rx="16" fill="rgba(108,99,255,0.1)"/>
+          <path d="M20 44L32 20L44 44" stroke="#6c63ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M24 36H40" stroke="#6c63ff" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="32" cy="32" r="18" stroke="#6c63ff" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.4"/>
+        </svg>
+        <h2>Drop your file here</h2>
+        <p>PDF, Word, JPG, PNG, GIF, TIFF, BMP, WebP<br>or tap to browse</p>
+        <button class="btn btn-primary" style="pointer-events:none">Choose File</button>
+      </div>
+
+      <!-- Document canvas -->
+      <div id="doc-canvas-wrapper">
+        <canvas id="doc-canvas"></canvas>
+        <!-- draw layer -->
+        <canvas id="draw-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+        <!-- annotations -->
+        <div id="annotations-layer" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SIGNATURE PANEL -->
+<div id="sig-panel">
+  <div class="sig-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h3>Add Signature</h3>
+      <button class="btn btn-secondary btn-sm" onclick="closeSigPanel()">✕ Close</button>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchSigTab('draw',this)">Draw</button>
+      <button class="tab-btn" onclick="switchSigTab('scan',this)">Upload / Scan</button>
+      <button class="tab-btn" onclick="switchSigTab('type',this)">Type</button>
+    </div>
+
+    <!-- Draw tab -->
+    <div class="tab-content active" id="sig-tab-draw">
+      <canvas id="sig-canvas"></canvas>
+      <div style="margin:8px 0 4px">
+        <div class="sig-color-row">
+          <span class="sig-color-label">Ink color:</span>
+          <div class="sig-color-swatch active" style="background:#000000" data-color="#000000" onclick="setSigColor(this)" title="Black"></div>
+          <div class="sig-color-swatch" style="background:#1a1a8c" data-color="#1a1a8c" onclick="setSigColor(this)" title="Navy Blue"></div>
+          <div class="sig-color-swatch" style="background:#0a5c2a" data-color="#0a5c2a" onclick="setSigColor(this)" title="Dark Green"></div>
+          <div class="sig-color-swatch" style="background:#8b0000" data-color="#8b0000" onclick="setSigColor(this)" title="Dark Red"></div>
+          <div class="sig-color-swatch" style="background:#6c63ff" data-color="#6c63ff" onclick="setSigColor(this)" title="Purple"></div>
+          <div class="sig-color-swatch" style="background:#555555" data-color="#555555" onclick="setSigColor(this)" title="Dark Grey"></div>
+          <input type="color" id="sig-custom-color" value="#000000" title="Custom color"
+            style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border);padding:0;cursor:pointer;background:none;"
+            oninput="setSigColorCustom(this.value)">
+        </div>
+      </div>
+      <div class="sig-actions">
+        <button class="btn btn-secondary btn-sm" onclick="clearSig()">Clear</button>
+        <button class="btn btn-primary" onclick="applySig()">Insert Signature</button>
+      </div>
+    </div>
+
+    <!-- Scan tab -->
+    <div class="tab-content" id="sig-tab-scan">
+      <div id="scan-drop" onclick="document.getElementById('scan-input').click()"
+           ondragover="event.preventDefault()" ondrop="handleScanDrop(event)">
+        <div style="font-size:32px;margin-bottom:8px">📷</div>
+        <div>Tap to upload signature image</div>
+        <div style="font-size:12px;margin-top:4px;opacity:0.6">PNG, JPG with transparent or white background</div>
+      </div>
+      <input type="file" id="scan-input" accept="image/*" onchange="loadScanSig(this)">
+      <img id="scan-preview" alt="Signature preview">
+      <div class="sig-actions" style="margin-top:10px">
+        <button class="btn btn-primary" id="apply-scan-btn" onclick="applyScanSig()" style="display:none">Insert This Signature</button>
+      </div>
+    </div>
+
+    <!-- Type tab -->
+    <div class="tab-content" id="sig-tab-type">
+      <input type="text" id="type-sig-input" placeholder="Type your name..."
+        style="width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:18px;outline:none;font-family:'Syne',sans-serif">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px" id="font-options">
+        <button class="btn btn-secondary btn-sm active" onclick="setTypeSigFont('Syne',this)" style="font-family:'Syne'">Syne</button>
+        <button class="btn btn-secondary btn-sm" onclick="setTypeSigFont('Dancing Script',this)" style="font-family:'Dancing Script',cursive">Cursive</button>
+        <button class="btn btn-secondary btn-sm" onclick="setTypeSigFont('DM Mono',this)" style="font-family:'DM Mono'">Mono</button>
+      </div>
+      <div class="sig-actions" style="margin-top:10px">
+        <button class="btn btn-primary" onclick="applyTypeSig()">Insert Signature</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTE PANEL -->
+<div id="note-panel">
+  <div class="note-modal">
+    <h3>Add Note</h3>
+    <textarea id="note-textarea" placeholder="Type your note here..."></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="setNote('This document requires review.')">Requires Review</button>
+      <button class="btn btn-secondary btn-sm" onclick="setNote('Please sign and return.')">Sign & Return</button>
+      <button class="btn btn-secondary btn-sm" onclick="setNote('For your records only.')">For Records</button>
+    </div>
+    <!-- Note color picker -->
+    <div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500">Text Color</div>
+      <div class="ann-color-row" id="note-color-row">
+        <div class="ann-color-swatch active" style="background:#b8860b" data-color="#b8860b" onclick="setNoteColor(this)" title="Gold"></div>
+        <div class="ann-color-swatch" style="background:#000000" data-color="#000000" onclick="setNoteColor(this)" title="Black"></div>
+        <div class="ann-color-swatch" style="background:#1a1a8c" data-color="#1a1a8c" onclick="setNoteColor(this)" title="Navy"></div>
+        <div class="ann-color-swatch" style="background:#8b0000" data-color="#8b0000" onclick="setNoteColor(this)" title="Dark Red"></div>
+        <div class="ann-color-swatch" style="background:#0a5c2a" data-color="#0a5c2a" onclick="setNoteColor(this)" title="Dark Green"></div>
+        <div class="ann-color-swatch" style="background:#6c63ff" data-color="#6c63ff" onclick="setNoteColor(this)" title="Purple"></div>
+        <div class="ann-color-swatch" style="background:#e8e8f0" data-color="#e8e8f0" onclick="setNoteColor(this)" title="Light"></div>
+        <input type="color" id="note-custom-color" value="#b8860b" title="Custom color"
+          style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border);padding:0;cursor:pointer;"
+          oninput="setNoteColorCustom(this.value)">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary" onclick="closeNotePanel()">Cancel</button>
+      <button class="btn btn-primary" onclick="applyNote()">Add Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div style="font-size:14px;color:var(--text2)">Processing document…</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── GLOBALS ──
+let pdfDoc = null;
+let currentPage = 1;
+let totalPages = 1;
+let scale = 1;
+let docType = null; // 'pdf' | 'image'
+let loadedImageSrc = null;
+let annotations = []; // {el, type}
+let drawMode = false;
+let eraseMode = false;
+let drawColor = '#e8e8f0';
+let brushSize = 3;
+let isDrawing = false;
+let lastX = 0, lastY = 0;
+let sigMode = 'draw';
+let scannedSigDataUrl = null;
+let typeSigFont = 'Syne';
+let drawCtx = null;
+let stampSectionOpen = false;
+let noteColor = '#b8860b';
+let dateColor = '#1a1a8c';
+// per-page draw data
+let pageDrawData = {};
+
+const canvas = document.getElementById('doc-canvas');
+const ctx = canvas.getContext('2d');
+const drawCanvas = document.getElementById('draw-canvas');
+const wrapper = document.getElementById('doc-canvas-wrapper');
+const annLayer = document.getElementById('annotations-layer');
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── UPLOAD ──
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  processFile(file);
+  input.value = '';
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  showLoading();
+  const ext = file.name.split('.').pop().toLowerCase();
+  const imgExts = ['png','jpg','jpeg','gif','bmp','webp','tiff','tif'];
+  
+  if (ext === 'pdf') {
+    docType = 'pdf';
+    const reader = new FileReader();
+    reader.onload = e => loadPDF(e.target.result);
+    reader.readAsArrayBuffer(file);
+  } else if (imgExts.includes(ext)) {
+    docType = 'image';
+    const reader = new FileReader();
+    reader.onload = e => loadImage(e.target.result);
+    reader.readAsDataURL(file);
+  } else {
+    // Treat doc/docx as image placeholder for demo
+    docType = 'image';
+    const reader = new FileReader();
+    reader.onload = e => loadImage(e.target.result);
+    reader.readAsDataURL(file);
+  }
+}
+
+function loadPDF(arrayBuffer) {
+  pageDrawData = {};
+  clearAnnotations();
+  pdfjsLib.getDocument({data: arrayBuffer}).promise.then(pdf => {
+    pdfDoc = pdf;
+    totalPages = pdf.numPages;
+    currentPage = 1;
+    renderPDFPage(currentPage);
+  }).catch(err => {
+    hideLoading();
+    showToast('Error loading PDF. Try another file.');
+    console.error(err);
+  });
+}
+
+function renderPDFPage(pageNum) {
+  showLoading();
+  pdfDoc.getPage(pageNum).then(page => {
+    const vp = page.getViewport({scale: getScale()});
+    canvas.width = vp.width;
+    canvas.height = vp.height;
+    drawCanvas.width = vp.width;
+    drawCanvas.height = vp.height;
+    drawCtx = drawCanvas.getContext('2d');
+    restoreDrawData(pageNum);
+    page.render({canvasContext: ctx, viewport: vp}).promise.then(() => {
+      showDocCanvas();
+      updatePageNav();
+      hideLoading();
+    });
+  });
+}
+
+function loadImage(src) {
+  loadedImageSrc = src;
+  pdfDoc = null; totalPages = 1; currentPage = 1;
+  pageDrawData = {};
+  clearAnnotations();
+  const img = new Image();
+  img.onload = () => {
+    const sc = getScale();
+    canvas.width = img.width * sc;
+    canvas.height = img.height * sc;
+    drawCanvas.width = canvas.width;
+    drawCanvas.height = canvas.height;
+    drawCtx = drawCanvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    showDocCanvas();
+    updatePageNav();
+    hideLoading();
+  };
+  img.src = src;
+}
+
+function getScale() {
+  const area = document.getElementById('canvas-area');
+  const maxW = area.clientWidth - 40;
+  const maxH = area.clientHeight - 40;
+  if (docType === 'pdf') {
+    return Math.min(1.5, maxW / 612, maxH / 792);
+  }
+  return 1;
+}
+
+function showDocCanvas() {
+  document.getElementById('upload-zone').style.display = 'none';
+  wrapper.style.display = 'inline-block';
+  document.getElementById('download-btn').style.display = 'flex';
+  document.getElementById('clear-btn').style.display = 'block';
+  annLayer.style.width = canvas.width + 'px';
+  annLayer.style.height = canvas.height + 'px';
+  annLayer.style.pointerEvents = 'all';
+  wrapper.style.width = canvas.width + 'px';
+  wrapper.style.height = canvas.height + 'px';
+  setupDrawEvents();
+}
+
+// ── PAGINATION ──
+function updatePageNav() {
+  const nav = document.getElementById('page-nav');
+  if (totalPages > 1) {
+    nav.style.display = 'flex';
+    document.getElementById('page-info').textContent = `${currentPage} / ${totalPages}`;
+  } else {
+    nav.style.display = 'none';
+  }
+}
+function prevPage() { if (currentPage > 1) { saveDrawData(currentPage); currentPage--; clearAnnotations(); renderPDFPage(currentPage); } }
+function nextPage() { if (currentPage < totalPages) { saveDrawData(currentPage); currentPage++; clearAnnotations(); renderPDFPage(currentPage); } }
+function saveDrawData(p) { if(drawCtx) pageDrawData[p] = drawCanvas.toDataURL(); }
+function restoreDrawData(p) {
+  if (drawCtx) {
+    drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+    if (pageDrawData[p]) {
+      const img = new Image();
+      img.onload = () => drawCtx.drawImage(img,0,0);
+      img.src = pageDrawData[p];
+    }
+  }
+}
+
+// ── DRAW ──
+function setupDrawEvents() {
+  drawCanvas.style.pointerEvents = drawMode || eraseMode ? 'all' : 'none';
+  drawCanvas.style.cursor = drawMode ? 'crosshair' : eraseMode ? 'cell' : 'default';
+  drawCanvas.removeEventListener('mousedown', onDrawStart);
+  drawCanvas.removeEventListener('mousemove', onDrawMove);
+  drawCanvas.removeEventListener('mouseup', onDrawEnd);
+  drawCanvas.removeEventListener('touchstart', onTouchStart);
+  drawCanvas.removeEventListener('touchmove', onTouchMove);
+  drawCanvas.removeEventListener('touchend', onDrawEnd);
+  if (drawMode || eraseMode) {
+    drawCanvas.addEventListener('mousedown', onDrawStart);
+    drawCanvas.addEventListener('mousemove', onDrawMove);
+    drawCanvas.addEventListener('mouseup', onDrawEnd);
+    drawCanvas.addEventListener('touchstart', onTouchStart, {passive:false});
+    drawCanvas.addEventListener('touchmove', onTouchMove, {passive:false});
+    drawCanvas.addEventListener('touchend', onDrawEnd);
+  }
+}
+function getPos(e, el) {
+  const r = el.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX - r.left, y: t.clientY - r.top };
+}
+function onTouchStart(e) { e.preventDefault(); onDrawStart(e); }
+function onTouchMove(e) { e.preventDefault(); onDrawMove(e); }
+function onDrawStart(e) {
+  isDrawing = true;
+  const p = getPos(e, drawCanvas);
+  lastX = p.x; lastY = p.y;
+}
+function onDrawMove(e) {
+  if (!isDrawing || !drawCtx) return;
+  const p = getPos(e, drawCanvas);
+  drawCtx.beginPath();
+  if (eraseMode) {
+    drawCtx.globalCompositeOperation = 'destination-out';
+    drawCtx.lineWidth = brushSize * 4;
+  } else {
+    drawCtx.globalCompositeOperation = 'source-over';
+    drawCtx.strokeStyle = drawColor;
+    drawCtx.lineWidth = brushSize;
+  }
+  drawCtx.lineCap = 'round';
+  drawCtx.lineJoin = 'round';
+  drawCtx.moveTo(lastX, lastY);
+  drawCtx.lineTo(p.x, p.y);
+  drawCtx.stroke();
+  lastX = p.x; lastY = p.y;
+}
+function onDrawEnd() { isDrawing = false; if(drawCtx) drawCtx.globalCompositeOperation = 'source-over'; }
+
+function toggleDraw() {
+  drawMode = !drawMode;
+  if (drawMode) eraseMode = false;
+  document.getElementById('draw-tool').classList.toggle('active', drawMode);
+  document.getElementById('erase-tool').classList.remove('active');
+  if (drawCanvas.width) { drawCanvas.style.pointerEvents = drawMode ? 'all':'none'; setupDrawEvents(); }
+}
+function toggleErase() {
+  eraseMode = !eraseMode;
+  if (eraseMode) drawMode = false;
+  document.getElementById('erase-tool').classList.toggle('active', eraseMode);
+  document.getElementById('draw-tool').classList.remove('active');
+  if (drawCanvas.width) { drawCanvas.style.pointerEvents = eraseMode?'all':'none'; setupDrawEvents(); }
+}
+function setColor(el) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  drawColor = el.dataset.color;
+}
+function updateBrushSize(el) {
+  brushSize = parseInt(el.value);
+  document.getElementById('brush-val').textContent = brushSize;
+}
+
+// ── SIGNATURE PAD ──
+let sigCanvas, sigCtx, sigDrawing = false, sigLastX = 0, sigLastY = 0;
+let sigColor = '#000000';
+function openSigPanel() {
+  document.getElementById('sig-panel').classList.add('open');
+  setTimeout(initSigCanvas, 50);
+}
+function closeSigPanel() { document.getElementById('sig-panel').classList.remove('open'); }
+function setSigColor(el) {
+  document.querySelectorAll('.sig-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  sigColor = el.dataset.color;
+  document.getElementById('sig-custom-color').value = sigColor;
+}
+function setSigColorCustom(val) {
+  sigColor = val;
+  document.querySelectorAll('.sig-color-swatch').forEach(s => s.classList.remove('active'));
+}
+function initSigCanvas() {
+  sigCanvas = document.getElementById('sig-canvas');
+  const parent = sigCanvas.parentElement;
+  sigCanvas.width = parent.clientWidth - 2;
+  sigCanvas.height = 180;
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.fillStyle = '#ffffff';
+  sigCtx.fillRect(0,0,sigCanvas.width,sigCanvas.height);
+  sigCanvas.removeEventListener('mousedown', sigStart);
+  sigCanvas.removeEventListener('mousemove', sigMove);
+  sigCanvas.removeEventListener('mouseup', sigEnd);
+  sigCanvas.removeEventListener('touchstart', sigTStart);
+  sigCanvas.removeEventListener('touchmove', sigTMove);
+  sigCanvas.removeEventListener('touchend', sigEnd);
+  sigCanvas.addEventListener('mousedown', sigStart);
+  sigCanvas.addEventListener('mousemove', sigMove);
+  sigCanvas.addEventListener('mouseup', sigEnd);
+  sigCanvas.addEventListener('touchstart', sigTStart, {passive:false});
+  sigCanvas.addEventListener('touchmove', sigTMove, {passive:false});
+  sigCanvas.addEventListener('touchend', sigEnd);
+}
+function sigTStart(e){e.preventDefault(); sigStart(e);}
+function sigTMove(e){e.preventDefault(); sigMove(e);}
+function sigStart(e) {
+  sigDrawing = true;
+  const p = getPos(e, sigCanvas);
+  sigLastX = p.x; sigLastY = p.y;
+}
+function sigMove(e) {
+  if (!sigDrawing) return;
+  const p = getPos(e, sigCanvas);
+  sigCtx.beginPath();
+  sigCtx.strokeStyle = sigColor;
+  sigCtx.lineWidth = 2.5;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  sigCtx.moveTo(sigLastX, sigLastY);
+  sigCtx.lineTo(p.x, p.y);
+  sigCtx.stroke();
+  sigLastX = p.x; sigLastY = p.y;
+}
+function sigEnd() { sigDrawing = false; }
+function clearSig() {
+  sigCtx.fillStyle = '#ffffff';
+  sigCtx.fillRect(0,0,sigCanvas.width,sigCanvas.height);
+}
+function applySig() {
+  const dataUrl = sigCanvas.toDataURL();
+  insertSigImage(dataUrl);
+  closeSigPanel();
+}
+
+// Switch sig tabs
+function switchSigTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sig-tab-'+tab).classList.add('active');
+  sigMode = tab;
+  if (tab === 'draw') setTimeout(initSigCanvas, 50);
+}
+
+// Scan sig
+function handleScanDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) loadScanFile(file);
+}
+function loadScanSig(input) {
+  const file = input.files[0];
+  if (file) loadScanFile(file);
+  input.value='';
+}
+function loadScanFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    scannedSigDataUrl = e.target.result;
+    const prev = document.getElementById('scan-preview');
+    prev.src = scannedSigDataUrl;
+    prev.style.display = 'block';
+    document.getElementById('apply-scan-btn').style.display = 'inline-flex';
+  };
+  reader.readAsDataURL(file);
+}
+function applyScanSig() {
+  if (!scannedSigDataUrl) { showToast('Please upload a signature image first.'); return; }
+  insertSigImage(scannedSigDataUrl);
+  closeSigPanel();
+}
+
+// Type sig
+function setTypeSigFont(font, btn) {
+  typeSigFont = font;
+  document.querySelectorAll('#font-options .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('type-sig-input').style.fontFamily = font;
+}
+function applyTypeSig() {
+  const text = document.getElementById('type-sig-input').value.trim();
+  if (!text) { showToast('Please type your name.'); return; }
+  // Render to canvas
+  const tc = document.createElement('canvas');
+  tc.width = 300; tc.height = 80;
+  const tx = tc.getContext('2d');
+  tx.fillStyle = '#ffffff';
+  tx.fillRect(0,0,tc.width,tc.height);
+  tx.fillStyle = '#000000';
+  tx.font = `italic 42px "${typeSigFont}", cursive`;
+  tx.textBaseline = 'middle';
+  tx.fillText(text, 10, 40);
+  insertSigImage(tc.toDataURL());
+  closeSigPanel();
+}
+
+// Insert sig as draggable annotation
+function insertSigImage(dataUrl) {
+  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  const ann = document.createElement('div');
+  ann.className = 'annotation';
+  const w = 200, h = 80;
+  ann.style.cssText = `left:${(canvas.width/2 - w/2)}px;top:${(canvas.height/2 - h/2)}px;width:${w}px;height:${h}px`;
+  const img = document.createElement('img');
+  img.className = 'sig-img'; img.src = dataUrl;
+  const del = document.createElement('button');
+  del.className = 'delete-handle'; del.textContent = '×';
+  del.onclick = e => { e.stopPropagation(); ann.remove(); };
+  const res = document.createElement('div');
+  res.className = 'resize-handle';
+  ann.appendChild(img); ann.appendChild(del); ann.appendChild(res);
+  makeDraggable(ann);
+  makeResizable(ann, res);
+  annLayer.appendChild(ann);
+  showToast('Signature added — drag to position it');
+}
+
+// ── STAMPS ──
+function toggleStampPanel() {
+  stampSectionOpen = !stampSectionOpen;
+  document.getElementById('stamp-section').style.display = stampSectionOpen ? 'block' : 'none';
+  document.getElementById('stamp-tool').classList.toggle('active', stampSectionOpen);
+}
+function addStamp(text, cls) {
+  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  const ann = document.createElement('div');
+  ann.className = 'annotation';
+  ann.style.cssText = `left:${canvas.width/2 - 100}px;top:${canvas.height/2 - 30}px`;
+  const span = document.createElement('div');
+  span.className = `stamp-text ${cls}`; span.textContent = text;
+  const del = document.createElement('button');
+  del.className = 'delete-handle'; del.textContent = '×';
+  del.onclick = e => { e.stopPropagation(); ann.remove(); };
+  ann.appendChild(span); ann.appendChild(del);
+  makeDraggable(ann);
+  annLayer.appendChild(ann);
+  showToast(`"${text}" stamp added`);
+}
+
+// ── NOTE ──
+function openNotePanel() { document.getElementById('note-panel').classList.add('open'); }
+function closeNotePanel() { document.getElementById('note-panel').classList.remove('open'); }
+function setNote(text) { document.getElementById('note-textarea').value = text; }
+function setNoteColor(el) {
+  document.querySelectorAll('#note-color-row .ann-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  noteColor = el.dataset.color;
+  document.getElementById('note-custom-color').value = noteColor;
+}
+function setNoteColorCustom(val) {
+  noteColor = val;
+  document.querySelectorAll('#note-color-row .ann-color-swatch').forEach(s => s.classList.remove('active'));
+}
+function applyNote() {
+  const text = document.getElementById('note-textarea').value.trim();
+  if (!text) { showToast('Please enter a note.'); return; }
+  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  const ann = document.createElement('div');
+  ann.className = 'annotation';
+  ann.style.cssText = `left:${canvas.width/2 - 90}px;top:${canvas.height/2 - 30}px`;
+  const box = document.createElement('div');
+  box.className = 'note-box';
+  box.style.color = noteColor;
+  box.style.borderColor = noteColor + '66';
+  box.style.background = noteColor + '18';
+  box.dataset.noteColor = noteColor;
+  const ta = document.createElement('textarea');
+  ta.className = 'note-input'; ta.value = text; ta.rows = 2;
+  ta.style.color = noteColor;
+  box.appendChild(ta);
+  const del = document.createElement('button');
+  del.className = 'delete-handle'; del.textContent = '×';
+  del.onclick = e => { e.stopPropagation(); ann.remove(); };
+  ann.appendChild(box); ann.appendChild(del);
+  makeDraggable(ann);
+  annLayer.appendChild(ann);
+  closeNotePanel();
+  document.getElementById('note-textarea').value = '';
+  showToast('Note added');
+}
+
+// ── DATE ──
+function setDateColor(el) {
+  document.querySelectorAll('#date-color-row .ann-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  dateColor = el.dataset.color;
+  document.getElementById('date-custom-color').value = dateColor;
+}
+function setDateColorCustom(val) {
+  dateColor = val;
+  document.querySelectorAll('#date-color-row .ann-color-swatch').forEach(s => s.classList.remove('active'));
+}
+function addDate() {
+  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  const now = new Date();
+  const str = now.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+  const ann = document.createElement('div');
+  ann.className = 'annotation';
+  ann.style.cssText = `left:${canvas.width/2 - 70}px;top:${canvas.height - 80}px`;
+  const label = document.createElement('div');
+  label.className = 'date-label';
+  label.textContent = str;
+  label.style.color = dateColor;
+  label.style.borderColor = dateColor + '66';
+  label.style.background = dateColor + '15';
+  label.dataset.dateColor = dateColor;
+  const del = document.createElement('button');
+  del.className = 'delete-handle'; del.textContent = '×';
+  del.onclick = e => { e.stopPropagation(); ann.remove(); };
+  ann.appendChild(label); ann.appendChild(del);
+  makeDraggable(ann);
+  annLayer.appendChild(ann);
+  showToast('Date stamp added');
+}
+
+// ── DRAG & RESIZE ──
+function makeDraggable(el) {
+  let startX, startY, origX, origY;
+  el.style.pointerEvents = 'all';
+  
+  function onDown(e) {
+    if (e.target.classList.contains('delete-handle') ||
+        e.target.classList.contains('resize-handle') ||
+        e.target.tagName === 'TEXTAREA') return;
+    e.preventDefault();
+    const t = e.touches ? e.touches[0] : e;
+    startX = t.clientX; startY = t.clientY;
+    const rect = el.getBoundingClientRect();
+    const parentRect = annLayer.getBoundingClientRect();
+    origX = parseInt(el.style.left); origY = parseInt(el.style.top);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onTMove, {passive:false});
+    document.addEventListener('touchend', onUp);
+  }
+  function onTMove(e) { e.preventDefault(); onMove(e); }
+  function onMove(e) {
+    const t = e.touches ? e.touches[0] : e;
+    const dx = t.clientX - startX; const dy = t.clientY - startY;
+    el.style.left = (origX + dx) + 'px';
+    el.style.top = (origY + dy) + 'px';
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onTMove);
+    document.removeEventListener('touchend', onUp);
+  }
+  el.addEventListener('mousedown', onDown);
+  el.addEventListener('touchstart', onDown, {passive:false});
+}
+
+function makeResizable(el, handle) {
+  handle.style.pointerEvents = 'all';
+  let startX, startY, startW, startH;
+  function onDown(e) {
+    e.preventDefault(); e.stopPropagation();
+    const t = e.touches ? e.touches[0] : e;
+    startX = t.clientX; startY = t.clientY;
+    startW = el.offsetWidth; startH = el.offsetHeight;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onTMove, {passive:false});
+    document.addEventListener('touchend', onUp);
+  }
+  function onTMove(e) { e.preventDefault(); onMove(e); }
+  function onMove(e) {
+    const t = e.touches ? e.touches[0] : e;
+    el.style.width = Math.max(60, startW + t.clientX - startX) + 'px';
+    el.style.height = Math.max(30, startH + t.clientY - startY) + 'px';
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onTMove);
+    document.removeEventListener('touchend', onUp);
+  }
+  handle.addEventListener('mousedown', onDown);
+  handle.addEventListener('touchstart', onDown, {passive:false});
+}
+
+// ── CLEAR ──
+function clearAll() {
+  if (!confirm('Clear all annotations and drawings?')) return;
+  clearAnnotations();
+  if (drawCtx) drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+  pageDrawData = {};
+}
+function clearAnnotations() {
+  annLayer.innerHTML = '';
+}
+
+// ── DOWNLOAD ──
+async function downloadDoc() {
+  showLoading();
+  try {
+    await flattenAndDownload();
+  } catch(err) {
+    console.error(err);
+    showToast('Download failed. Try again.');
+  }
+  hideLoading();
+}
+
+async function flattenAndDownload() {
+  // Merge: doc canvas + draw canvas + annotations rendered to canvas
+  const merged = document.createElement('canvas');
+  merged.width = canvas.width;
+  merged.height = canvas.height;
+  const mctx = merged.getContext('2d');
+  
+  // 1. Doc
+  mctx.drawImage(canvas, 0, 0);
+  // 2. Drawings
+  if (drawCtx) mctx.drawImage(drawCanvas, 0, 0);
+  // 3. Annotations (render each)
+  const anns = annLayer.querySelectorAll('.annotation');
+  for (const ann of anns) {
+    const x = parseInt(ann.style.left) || 0;
+    const y = parseInt(ann.style.top) || 0;
+    const w = ann.offsetWidth || 200;
+    const h = ann.offsetHeight || 60;
+    
+    // Sig image
+    const img = ann.querySelector('img.sig-img');
+    if (img) {
+      await new Promise(res => {
+        const i = new Image();
+        i.crossOrigin = 'anonymous';
+        i.onload = () => { mctx.drawImage(i, x, y, w, h); res(); };
+        i.onerror = res;
+        i.src = img.src;
+      });
+      continue;
+    }
+    // Stamp
+    const stamp = ann.querySelector('.stamp-text');
+    if (stamp) {
+      mctx.save();
+      mctx.translate(x + 10, y + 20);
+      mctx.rotate(-12 * Math.PI / 180);
+      const cls = stamp.className.includes('approved') ? '#43e8a0' :
+                  stamp.className.includes('rejected') ? '#ff4466' :
+                  stamp.className.includes('review') ? '#ffd166' : '#6c63ff';
+      mctx.strokeStyle = cls; mctx.fillStyle = cls;
+      mctx.lineWidth = 3;
+      mctx.font = 'bold 22px Syne, sans-serif';
+      const sw = mctx.measureText(stamp.textContent).width + 28;
+      roundRect(mctx, 0, 0, sw, 38, 8);
+      mctx.stroke();
+      mctx.font = 'bold 18px Syne, sans-serif';
+      mctx.textBaseline = 'middle';
+      mctx.fillText(stamp.textContent, 14, 19);
+      mctx.restore();
+      continue;
+    }
+    // Note
+    const note = ann.querySelector('.note-box');
+    if (note) {
+      const text = note.querySelector('textarea')?.value || note.textContent.replace('×','').trim();
+      mctx.save();
+      mctx.fillStyle = 'rgba(255,213,0,0.12)';
+      mctx.strokeStyle = 'rgba(255,213,0,0.45)';
+      mctx.lineWidth = 1.5;
+      roundRect(mctx, x, y, Math.max(w, 140), Math.max(h, 50), 8);
+      mctx.fill(); mctx.stroke();
+      mctx.fillStyle = '#ffd166';
+      mctx.font = '13px DM Sans, sans-serif';
+      mctx.textBaseline = 'top';
+      wrapText(mctx, text, x+10, y+10, Math.max(w,140)-20, 18);
+      mctx.restore();
+      continue;
+    }
+    // Date
+    const date = ann.querySelector('.date-label');
+    if (date) {
+      mctx.save();
+      mctx.fillStyle = 'rgba(108,99,255,0.2)';
+      mctx.strokeStyle = 'rgba(108,99,255,0.5)';
+      mctx.lineWidth = 1;
+      roundRect(mctx, x, y, w+4, 28, 6);
+      mctx.fill(); mctx.stroke();
+      mctx.fillStyle = '#e8e8f0';
+      mctx.font = '13px DM Mono, monospace';
+      mctx.textBaseline = 'middle';
+      mctx.fillText(date.textContent, x+10, y+14);
+      mctx.restore();
+    }
+  }
+  
+  // Save as PNG
+  const a = document.createElement('a');
+  a.href = merged.toDataURL('image/png');
+  a.download = 'signed-document.png';
+  a.click();
+  showToast('Document downloaded!');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function wrapText(ctx, text, x, y, maxW, lineH) {
+  const words = text.split(' ');
+  let line = '';
+  for (const w of words) {
+    const test = line + w + ' ';
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, y); y += lineH; line = w + ' ';
+    } else { line = test; }
+  }
+  ctx.fillText(line, x, y);
+}
+
+// ── SIDEBAR ──
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+
+// ── UTILS ──
+function showLoading() { document.getElementById('loading').classList.add('show'); }
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Drag on upload zone
+const uz = document.getElementById('upload-zone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag-over'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('drag-over'));
+uz.addEventListener('drop', handleDrop);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeSigPanel(); closeNotePanel(); closeSidebar(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if(canvas.width) downloadDoc(); }
+  if (e.key === 'd' && !['INPUT','TEXTAREA'].includes(e.target.tagName)) toggleDraw();
+});
+</script>
+</body>
+</html>
