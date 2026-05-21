@@ -206,7 +206,9 @@
   }
   #scan-drop:hover { border-color:var(--accent); color:var(--text); }
   #scan-input { display:none; }
-  #scan-preview { max-width:100%; max-height:180px; border-radius:8px; display:none; margin:0 auto; }
+  #scan-preview { max-width:100%; max-height:180px; border-radius:8px; display:none; margin:0 auto;
+    background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 16px 16px;
+  }
 
   /* ── ANNOTATIONS on canvas ── */
   .annotation {
@@ -1084,11 +1086,37 @@ function loadScanSig(input) {
 function loadScanFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    scannedSigDataUrl = e.target.result;
-    const prev = document.getElementById('scan-preview');
-    prev.src = scannedSigDataUrl;
-    prev.style.display = 'block';
-    document.getElementById('apply-scan-btn').style.display = 'inline-flex';
+    const rawUrl = e.target.result;
+    // Auto-clean: remove near-white background (same as camera capture)
+    const img = new Image();
+    img.onload = () => {
+      const tc = document.createElement('canvas');
+      tc.width = img.naturalWidth; tc.height = img.naturalHeight;
+      const tctx = tc.getContext('2d');
+      tctx.drawImage(img, 0, 0);
+      const imgData = tctx.getImageData(0, 0, tc.width, tc.height);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i+1], b = d[i+2];
+        const brightness = (r + g + b) / 3;
+        if (brightness > 200) {
+          d[i+3] = 0; // transparent
+        } else {
+          const factor = Math.min(1, (255 - brightness) / 100);
+          d[i]   = Math.round(r * (1 - factor));
+          d[i+1] = Math.round(g * (1 - factor));
+          d[i+2] = Math.round(b * (1 - factor));
+          d[i+3] = Math.round(255 * factor);
+        }
+      }
+      tctx.putImageData(imgData, 0, 0);
+      scannedSigDataUrl = tc.toDataURL('image/png');
+      const prev = document.getElementById('scan-preview');
+      prev.src = scannedSigDataUrl;
+      prev.style.display = 'block';
+      document.getElementById('apply-scan-btn').style.display = 'inline-flex';
+    };
+    img.src = rawUrl;
   };
   reader.readAsDataURL(file);
 }
@@ -1128,7 +1156,11 @@ function insertSigImage(dataUrl) {
   const ann = document.createElement('div');
   ann.className = 'annotation';
   const w = 200, h = 80;
-  ann.style.cssText = `left:${(canvas.width/2 - w/2)}px;top:${(canvas.height/2 - h/2)}px;width:${w}px;height:${h}px`;
+  // Use CSS display dimensions (not raw canvas pixel dimensions) so the
+  // annotation lands in the visible centre of the page
+  const displayW = parseFloat(canvas.style.width)  || canvas.width;
+  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  ann.style.cssText = `left:${(displayW/2 - w/2)}px;top:${(displayH/2 - h/2)}px;width:${w}px;height:${h}px`;
   const img = document.createElement('img');
   img.className = 'sig-img'; img.src = dataUrl;
   const del = document.createElement('button');
@@ -1153,7 +1185,9 @@ function addStamp(text, cls) {
   if (!canvas.width) { showToast('Please upload a document first.'); return; }
   const ann = document.createElement('div');
   ann.className = 'annotation';
-  ann.style.cssText = `left:${canvas.width/2 - 100}px;top:${canvas.height/2 - 30}px`;
+  const displayW = parseFloat(canvas.style.width)  || canvas.width;
+  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  ann.style.cssText = `left:${displayW/2 - 100}px;top:${displayH/2 - 30}px`;
   const span = document.createElement('div');
   span.className = `stamp-text ${cls}`; span.textContent = text;
   const del = document.createElement('button');
@@ -1185,7 +1219,9 @@ function applyNote() {
   if (!canvas.width) { showToast('Please upload a document first.'); return; }
   const ann = document.createElement('div');
   ann.className = 'annotation';
-  ann.style.cssText = `left:${canvas.width/2 - 90}px;top:${canvas.height/2 - 30}px`;
+  const displayW = parseFloat(canvas.style.width)  || canvas.width;
+  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  ann.style.cssText = `left:${displayW/2 - 90}px;top:${displayH/2 - 30}px`;
   const box = document.createElement('div');
   box.className = 'note-box';
   box.style.color = noteColor;
@@ -1224,7 +1260,10 @@ function addDate() {
   const str = now.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
   const ann = document.createElement('div');
   ann.className = 'annotation';
-  ann.style.cssText = `left:${canvas.width/2 - 70}px;top:${canvas.height - 80}px`;
+  // Use CSS display dimensions so the date lands visibly on the page
+  const displayW = parseFloat(canvas.style.width)  || canvas.width;
+  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  ann.style.cssText = `left:${displayW/2 - 70}px;top:${displayH/2 + 60}px`;
   const label = document.createElement('div');
   label.className = 'date-label';
   label.textContent = str;
