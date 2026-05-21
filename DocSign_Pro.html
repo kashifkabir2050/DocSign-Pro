@@ -6,6 +6,7 @@
 <title>DocSign Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
 
@@ -394,6 +395,46 @@
     position:absolute; left:0; right:0; height:4px;
     background:var(--bg); pointer-events:none;
   }
+
+  /* ── WORD DOC PREVIEW ── */
+  #word-preview-wrapper {
+    display:none;
+    background:#fff;
+    box-shadow:0 0 0 1px var(--border), var(--shadow), 0 0 80px rgba(108,99,255,0.1);
+    border-radius:4px;
+    position:relative;
+    width:794px; /* A4 width at 96dpi */
+    min-height:200px;
+  }
+  #word-preview-content {
+    padding:72px 80px;
+    font-family: 'Calibri', 'DM Sans', Georgia, serif;
+    font-size:14px;
+    line-height:1.7;
+    color:#111;
+    min-height:1123px; /* A4 height at 96dpi */
+    background:#fff;
+  }
+  #word-preview-content h1 { font-size:24px; font-weight:700; margin:0 0 16px; color:#111; }
+  #word-preview-content h2 { font-size:20px; font-weight:700; margin:20px 0 10px; color:#111; }
+  #word-preview-content h3 { font-size:16px; font-weight:600; margin:16px 0 8px; color:#222; }
+  #word-preview-content p  { margin:0 0 10px; color:#222; }
+  #word-preview-content table { border-collapse:collapse; width:100%; margin:12px 0; }
+  #word-preview-content td, #word-preview-content th {
+    border:1px solid #ccc; padding:6px 10px; font-size:13px; color:#222;
+  }
+  #word-preview-content th { background:#f0f0f0; font-weight:600; }
+  #word-preview-content ul, #word-preview-content ol { margin:0 0 10px 24px; color:#222; }
+  #word-preview-content li { margin-bottom:4px; }
+  #word-preview-content strong { font-weight:700; }
+  #word-preview-content em { font-style:italic; }
+  #word-preview-content img { max-width:100%; height:auto; }
+  #word-preview-content a { color:#1a1a8c; text-decoration:underline; }
+  /* annotations on top of word preview */
+  #word-annotations-layer {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none;
+  }
 </style>
 </head>
 <body>
@@ -567,6 +608,12 @@
         <!-- annotations -->
         <div id="annotations-layer" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></div>
       </div>
+
+      <!-- Word document preview (shown for .doc/.docx) -->
+      <div id="word-preview-wrapper">
+        <div id="word-preview-content"></div>
+        <div id="word-annotations-layer"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -710,7 +757,7 @@
 <!-- LOADING -->
 <div id="loading">
   <div class="spinner"></div>
-  <div style="font-size:14px;color:var(--text2)">Processing document…</div>
+  <div style="font-size:14px;color:var(--text2)" id="loading-msg">Loading document…</div>
 </div>
 
 <!-- TOAST -->
@@ -746,6 +793,7 @@ const ctx = canvas.getContext('2d');
 const drawCanvas = document.getElementById('draw-canvas');
 const wrapper = document.getElementById('doc-canvas-wrapper');
 const annLayer = document.getElementById('annotations-layer');
+let annLayerActive = annLayer; // tracks which annotation layer is currently in use
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -765,6 +813,7 @@ function handleDrop(e) {
 
 function processFile(file) {
   showLoading();
+  setLoadingMsg('Loading document…');
   const ext = file.name.split('.').pop().toLowerCase();
   const imgExts = ['png','jpg','jpeg','gif','bmp','webp','tiff','tif'];
   
@@ -778,12 +827,15 @@ function processFile(file) {
     const reader = new FileReader();
     reader.onload = e => loadImage(e.target.result);
     reader.readAsDataURL(file);
-  } else {
-    // Treat doc/docx as image placeholder for demo
-    docType = 'image';
+  } else if (ext === 'docx' || ext === 'doc') {
+    docType = 'word';
+    setLoadingMsg('Converting Word document…');
     const reader = new FileReader();
-    reader.onload = e => loadImage(e.target.result);
-    reader.readAsDataURL(file);
+    reader.onload = e => loadWordDoc(e.target.result);
+    reader.readAsArrayBuffer(file);
+  } else {
+    hideLoading();
+    showToast('Unsupported file type. Please upload a PDF, Word (.docx), or image file.');
   }
 }
 
@@ -811,14 +863,15 @@ function renderPDFPage(pageNum) {
   pdfDoc.getPage(pageNum).then(page => {
     const dpr = window.devicePixelRatio || 1;
     const screenScale = getScale();
-    // Render at devicePixelRatio × screenScale for crisp display
-    const renderScale = screenScale * dpr;
+    // Render at 2× minimum DPR for crisp text
+    const renderDPR = Math.max(dpr, 2);
+    const renderScale = screenScale * renderDPR;
     const vp = page.getViewport({scale: renderScale});
     canvas.width = vp.width;
     canvas.height = vp.height;
     // CSS size stays at screenScale so it fits the viewport
-    canvas.style.width  = (vp.width  / dpr) + 'px';
-    canvas.style.height = (vp.height / dpr) + 'px';
+    canvas.style.width  = (vp.width  / renderDPR) + 'px';
+    canvas.style.height = (vp.height / renderDPR) + 'px';
     drawCanvas.width  = vp.width;
     drawCanvas.height = vp.height;
     drawCanvas.style.width  = canvas.style.width;
@@ -878,6 +931,7 @@ function getScale() {
 function showDocCanvas() {
   document.getElementById('upload-zone').style.display = 'none';
   wrapper.style.display = 'inline-block';
+  document.getElementById('word-preview-wrapper').style.display = 'none';
   document.getElementById('download-btns').style.display = 'flex';
   document.getElementById('clear-btn').style.display = 'block';
   // Use CSS display size (not raw pixel dimensions) so layout isn't blown out
@@ -889,6 +943,47 @@ function showDocCanvas() {
   wrapper.style.width  = displayW;
   wrapper.style.height = displayH;
   setupDrawEvents();
+}
+
+function showWordDoc() {
+  document.getElementById('upload-zone').style.display = 'none';
+  wrapper.style.display = 'none';
+  const wordWrapper = document.getElementById('word-preview-wrapper');
+  wordWrapper.style.display = 'block';
+  document.getElementById('download-btns').style.display = 'flex';
+  document.getElementById('clear-btn').style.display = 'block';
+  const wordAnnLayer = document.getElementById('word-annotations-layer');
+  wordAnnLayer.style.pointerEvents = 'all';
+  // Point annLayer ref to word annotation layer for tool compatibility
+  annLayerActive = wordAnnLayer;
+}
+
+function loadWordDoc(arrayBuffer) {
+  if (typeof mammoth === 'undefined') {
+    hideLoading();
+    showToast('Word converter not loaded yet. Please try again in a moment.');
+    return;
+  }
+  mammoth.convertToHtml({arrayBuffer})
+    .then(result => {
+      const content = document.getElementById('word-preview-content');
+      content.innerHTML = result.value || '<p style="color:#888">This document appears to be empty.</p>';
+      // Clear any old canvas state
+      pdfDoc = null; totalPages = 1; currentPage = 1;
+      pageDrawData = {};
+      clearAnnotations();
+      showWordDoc();
+      updatePageNav();
+      hideLoading();
+      if (result.messages && result.messages.length) {
+        console.info('Mammoth messages:', result.messages);
+      }
+    })
+    .catch(err => {
+      hideLoading();
+      console.error('Word conversion error:', err);
+      showToast('Could not read Word file. Please try saving it as .docx and uploading again.');
+    });
 }
 
 // ── PAGINATION ──
@@ -1150,16 +1245,20 @@ function applyTypeSig() {
   closeSigPanel();
 }
 
-// Insert sig as draggable annotation
 function insertSigImage(dataUrl) {
-  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  if (!canvas.width && docType !== 'word') { showToast('Please upload a document first.'); return; }
   const ann = document.createElement('div');
   ann.className = 'annotation';
   const w = 200, h = 80;
-  // Use CSS display dimensions (not raw canvas pixel dimensions) so the
-  // annotation lands in the visible centre of the page
-  const displayW = parseFloat(canvas.style.width)  || canvas.width;
-  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  let displayW, displayH;
+  if (docType === 'word') {
+    const wordWrapper = document.getElementById('word-preview-wrapper');
+    displayW = wordWrapper.offsetWidth || 794;
+    displayH = wordWrapper.offsetHeight || 600;
+  } else {
+    displayW = parseFloat(canvas.style.width)  || canvas.width;
+    displayH = parseFloat(canvas.style.height) || canvas.height;
+  }
   ann.style.cssText = `left:${(displayW/2 - w/2)}px;top:${(displayH/2 - h/2)}px;width:${w}px;height:${h}px`;
   const img = document.createElement('img');
   img.className = 'sig-img'; img.src = dataUrl;
@@ -1171,7 +1270,7 @@ function insertSigImage(dataUrl) {
   ann.appendChild(img); ann.appendChild(del); ann.appendChild(res);
   makeDraggable(ann);
   makeResizable(ann, res);
-  annLayer.appendChild(ann);
+  annLayerActive.appendChild(ann);
   showToast('Signature added — drag to position it');
 }
 
@@ -1182,11 +1281,18 @@ function toggleStampPanel() {
   document.getElementById('stamp-tool').classList.toggle('active', stampSectionOpen);
 }
 function addStamp(text, cls) {
-  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  if (!canvas.width && docType !== 'word') { showToast('Please upload a document first.'); return; }
   const ann = document.createElement('div');
   ann.className = 'annotation';
-  const displayW = parseFloat(canvas.style.width)  || canvas.width;
-  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  let displayW, displayH;
+  if (docType === 'word') {
+    const wordWrapper = document.getElementById('word-preview-wrapper');
+    displayW = wordWrapper.offsetWidth || 794;
+    displayH = wordWrapper.offsetHeight || 600;
+  } else {
+    displayW = parseFloat(canvas.style.width)  || canvas.width;
+    displayH = parseFloat(canvas.style.height) || canvas.height;
+  }
   ann.style.cssText = `left:${displayW/2 - 100}px;top:${displayH/2 - 30}px`;
   const span = document.createElement('div');
   span.className = `stamp-text ${cls}`; span.textContent = text;
@@ -1195,7 +1301,7 @@ function addStamp(text, cls) {
   del.onclick = e => { e.stopPropagation(); ann.remove(); };
   ann.appendChild(span); ann.appendChild(del);
   makeDraggable(ann);
-  annLayer.appendChild(ann);
+  annLayerActive.appendChild(ann);
   showToast(`"${text}" stamp added`);
 }
 
@@ -1216,11 +1322,18 @@ function setNoteColorCustom(val) {
 function applyNote() {
   const text = document.getElementById('note-textarea').value.trim();
   if (!text) { showToast('Please enter a note.'); return; }
-  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  if (!canvas.width && docType !== 'word') { showToast('Please upload a document first.'); return; }
   const ann = document.createElement('div');
   ann.className = 'annotation';
-  const displayW = parseFloat(canvas.style.width)  || canvas.width;
-  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  let displayW, displayH;
+  if (docType === 'word') {
+    const wordWrapper = document.getElementById('word-preview-wrapper');
+    displayW = wordWrapper.offsetWidth || 794;
+    displayH = wordWrapper.offsetHeight || 600;
+  } else {
+    displayW = parseFloat(canvas.style.width)  || canvas.width;
+    displayH = parseFloat(canvas.style.height) || canvas.height;
+  }
   ann.style.cssText = `left:${displayW/2 - 90}px;top:${displayH/2 - 30}px`;
   const box = document.createElement('div');
   box.className = 'note-box';
@@ -1237,7 +1350,7 @@ function applyNote() {
   del.onclick = e => { e.stopPropagation(); ann.remove(); };
   ann.appendChild(box); ann.appendChild(del);
   makeDraggable(ann);
-  annLayer.appendChild(ann);
+  annLayerActive.appendChild(ann);
   closeNotePanel();
   document.getElementById('note-textarea').value = '';
   showToast('Note added');
@@ -1255,14 +1368,20 @@ function setDateColorCustom(val) {
   document.querySelectorAll('#date-color-row .ann-color-swatch').forEach(s => s.classList.remove('active'));
 }
 function addDate() {
-  if (!canvas.width) { showToast('Please upload a document first.'); return; }
+  if (!canvas.width && docType !== 'word') { showToast('Please upload a document first.'); return; }
   const now = new Date();
   const str = now.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
   const ann = document.createElement('div');
   ann.className = 'annotation';
-  // Use CSS display dimensions so the date lands visibly on the page
-  const displayW = parseFloat(canvas.style.width)  || canvas.width;
-  const displayH = parseFloat(canvas.style.height) || canvas.height;
+  let displayW, displayH;
+  if (docType === 'word') {
+    const wordWrapper = document.getElementById('word-preview-wrapper');
+    displayW = wordWrapper.offsetWidth || 794;
+    displayH = wordWrapper.offsetHeight || 600;
+  } else {
+    displayW = parseFloat(canvas.style.width)  || canvas.width;
+    displayH = parseFloat(canvas.style.height) || canvas.height;
+  }
   ann.style.cssText = `left:${displayW/2 - 70}px;top:${displayH/2 + 60}px`;
   const label = document.createElement('div');
   label.className = 'date-label';
@@ -1276,7 +1395,7 @@ function addDate() {
   del.onclick = e => { e.stopPropagation(); ann.remove(); };
   ann.appendChild(label); ann.appendChild(del);
   makeDraggable(ann);
-  annLayer.appendChild(ann);
+  annLayerActive.appendChild(ann);
   showToast('Date stamp added');
 }
 
@@ -1355,6 +1474,8 @@ function clearAll() {
 }
 function clearAnnotations() {
   annLayer.innerHTML = '';
+  document.getElementById('word-annotations-layer').innerHTML = '';
+  annLayerActive = annLayer;
 }
 
 // ── DOWNLOAD ──
@@ -1524,6 +1645,10 @@ function closeSidebar() {
 // ── UTILS ──
 function showLoading() { document.getElementById('loading').classList.add('show'); }
 function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+function setLoadingMsg(msg) {
+  const el = document.getElementById('loading-msg');
+  if (el) el.textContent = msg;
+}
 let toastTimer;
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -1534,25 +1659,62 @@ function showToast(msg) {
 
 // ── PDF DOWNLOAD ──
 async function downloadPDF() {
-  if (!canvas.width) { showToast('No document loaded.'); return; }
+  if (!canvas.width && docType !== 'word') { showToast('No document loaded.'); return; }
   showLoading();
+  setLoadingMsg('Generating PDF…');
   try {
-    const merged = await buildMergedCanvas();
-    const imgData = merged.toDataURL('image/jpeg', 0.97);
-    const { jsPDF } = window.jspdf;
-    const pxToMm = 25.4 / 96; // 96 DPI reference
-    const imgW = merged.width  * pxToMm;
-    const imgH = merged.height * pxToMm;
-    const orientation = imgW > imgH ? 'l' : 'p';
-    const pdf = new jsPDF({ orientation, unit: 'mm', format: [imgW, imgH] });
-    pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH, '', 'FAST');
-    pdf.save('signed-document.pdf');
-    showToast('PDF downloaded!');
+    if (docType === 'word') {
+      // For Word docs, use window.print() in a styled iframe
+      await downloadWordDocAsPDF();
+    } else {
+      const merged = await buildMergedCanvas();
+      const imgData = merged.toDataURL('image/jpeg', 0.97);
+      const { jsPDF } = window.jspdf;
+      const pxToMm = 25.4 / 96; // 96 DPI reference
+      const imgW = merged.width  * pxToMm;
+      const imgH = merged.height * pxToMm;
+      const orientation = imgW > imgH ? 'l' : 'p';
+      const pdf = new jsPDF({ orientation, unit: 'mm', format: [imgW, imgH] });
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH, '', 'FAST');
+      pdf.save('signed-document.pdf');
+      showToast('PDF downloaded!');
+    }
   } catch(err) {
     console.error(err);
     showToast('PDF export failed. Try PNG instead.');
   }
   hideLoading();
+}
+
+async function downloadWordDocAsPDF() {
+  const content = document.getElementById('word-preview-content').innerHTML;
+  const annHTML = document.getElementById('word-annotations-layer').innerHTML;
+  const printWin = window.open('', '_blank', 'width=900,height=700');
+  printWin.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <title>Signed Document</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
+      body { margin:0; padding:0; font-family:'DM Sans',Calibri,Georgia,serif; font-size:14px; line-height:1.7; color:#111; background:#fff; }
+      .page { padding:72px 80px; position:relative; min-height:1060px; }
+      h1{font-size:24px;font-weight:700;margin:0 0 16px} h2{font-size:20px;font-weight:700;margin:20px 0 10px}
+      h3{font-size:16px;font-weight:600;margin:16px 0 8px} p{margin:0 0 10px}
+      table{border-collapse:collapse;width:100%;margin:12px 0} td,th{border:1px solid #ccc;padding:6px 10px;font-size:13px}
+      th{background:#f0f0f0;font-weight:600} ul,ol{margin:0 0 10px 24px} li{margin-bottom:4px}
+      .ann-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+      .annotation{position:absolute;pointer-events:none}
+      .stamp-text{font-weight:800;border:3px solid currentColor;border-radius:8px;padding:6px 14px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;white-space:nowrap;font-size:22px;transform:rotate(-12deg);display:inline-block;font-family:sans-serif}
+      .stamp-approved{color:#2a9d60}.stamp-rejected{color:#d9334f}.stamp-review{color:#c8960a}.stamp-confidential{color:#5047cc}
+      .note-box{background:rgba(255,213,0,0.1);border:1.5px solid rgba(255,213,0,0.4);border-radius:8px;padding:10px 12px;min-width:140px;min-height:50px;font-size:13px;line-height:1.5}
+      .note-input{background:transparent;border:none;width:100%;font:inherit;resize:none;min-height:40px}
+      .date-label{font-family:monospace;font-size:13px;border:2px solid;border-radius:6px;padding:4px 10px;white-space:nowrap}
+      .sig-img{max-width:100%;max-height:100%;object-fit:contain} .delete-handle,.resize-handle{display:none}
+    </style>
+  </head><body><div class="page">${content}<div class="ann-layer">${annHTML}</div></div>
+  <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),1000)}<\/script>
+  </body></html>`);
+  printWin.document.close();
+  showToast('Print dialog opened — save as PDF');
 }
 
 // ── CAMERA SCAN SIGNATURE ──
