@@ -378,6 +378,15 @@
   /* sig img on doc */
   .sig-img { max-width:100%; max-height:100%; object-fit:contain; pointer-events:none; }
 
+  /* camera capture */
+  #camera-video { transform-origin: center; }
+  #camera-container { background: #0a0a0f; }
+  @media (max-width: 600px) {
+    #sig-panel { padding:10px; }
+    .sig-modal { padding:16px; }
+    #sig-canvas { height:150px; }
+  }
+
   /* page divider */
   .page-divider {
     position:absolute; left:0; right:0; height:4px;
@@ -405,10 +414,16 @@
     </div>
     <div class="header-actions">
       <button class="btn btn-secondary btn-sm" id="clear-btn" onclick="clearAll()" style="display:none">Clear All</button>
-      <button class="btn btn-success" id="download-btn" onclick="downloadDoc()" style="display:none">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Save & Download
-      </button>
+      <div id="download-btns" style="display:none;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" id="download-png-btn" onclick="downloadDoc()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          PNG
+        </button>
+        <button class="btn btn-success" id="download-pdf-btn" onclick="downloadPDF()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Save PDF
+        </button>
+      </div>
     </div>
   </header>
 
@@ -513,10 +528,10 @@
         <div class="sidebar-label">How to use</div>
         <ul style="font-size:12px;color:var(--text2);line-height:1.8;padding-left:16px">
           <li>Upload any PDF, image, or document</li>
-          <li>Draw signature on pad or scan it</li>
+          <li>Draw, type, upload or <strong>scan via camera</strong></li>
           <li>Drag & resize elements freely</li>
           <li>Add stamps, notes, date</li>
-          <li>Download flattened copy</li>
+          <li>Download as <strong>PNG</strong> or <strong>PDF</strong></li>
         </ul>
       </div>
 
@@ -563,7 +578,8 @@
     </div>
     <div class="tab-bar">
       <button class="tab-btn active" onclick="switchSigTab('draw',this)">Draw</button>
-      <button class="tab-btn" onclick="switchSigTab('scan',this)">Upload / Scan</button>
+      <button class="tab-btn" onclick="switchSigTab('scan',this)">Upload</button>
+      <button class="tab-btn" id="camera-tab-btn" onclick="switchSigTab('camera',this)">📷 Camera</button>
       <button class="tab-btn" onclick="switchSigTab('type',this)">Type</button>
     </div>
 
@@ -602,6 +618,41 @@
       <img id="scan-preview" alt="Signature preview">
       <div class="sig-actions" style="margin-top:10px">
         <button class="btn btn-primary" id="apply-scan-btn" onclick="applyScanSig()" style="display:none">Insert This Signature</button>
+      </div>
+    </div>
+
+    <!-- Camera tab -->
+    <div class="tab-content" id="sig-tab-camera">
+      <div id="camera-container" style="position:relative;border-radius:10px;overflow:hidden;background:#000;min-height:180px;display:flex;align-items:center;justify-content:center;">
+        <video id="camera-video" autoplay playsinline style="width:100%;max-height:220px;display:none;border-radius:10px;object-fit:cover;"></video>
+        <canvas id="camera-canvas" style="display:none;width:100%;border-radius:10px;"></canvas>
+        <div id="camera-placeholder" style="color:var(--text2);font-size:13px;text-align:center;padding:24px;gap:10px;display:flex;flex-direction:column;align-items:center">
+          <div style="font-size:36px">📷</div>
+          <div>Use your camera to scan your handwritten signature</div>
+          <div style="font-size:11px;opacity:0.6">Write on white paper and hold it up clearly</div>
+          <button class="btn btn-primary" onclick="startCamera()" id="start-camera-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            Open Camera
+          </button>
+        </div>
+      </div>
+      <div id="camera-controls" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap" class="sig-actions">
+        <button class="btn btn-secondary btn-sm" onclick="switchCamera()" id="flip-cam-btn" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+          Flip
+        </button>
+        <button class="btn btn-primary" onclick="captureFromCamera()" id="capture-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><circle cx="12" cy="12" r="3"/><path d="M20 8H4a2 2 0 00-2 2v8a2 2 0 002 2h16a2 2 0 002-2v-8a2 2 0 00-2-2z"/><polyline points="16 2 12 6 8 2"/></svg>
+          Capture
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="retakeCamera()">Retake</button>
+        <button class="btn btn-primary" id="apply-camera-btn" onclick="applyCameraCapture()" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
+          Use This
+        </button>
+      </div>
+      <div id="camera-hint" style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center;display:none">
+        Tip: Hold signature paper flat &amp; steady for best results. Background will be auto-removed.
       </div>
     </div>
 
@@ -734,7 +785,11 @@ function processFile(file) {
   }
 }
 
+// Store original PDF arrayBuffer for hi-res download
+let pdfArrayBuffer = null;
+
 function loadPDF(arrayBuffer) {
+  pdfArrayBuffer = arrayBuffer;
   pageDrawData = {};
   clearAnnotations();
   pdfjsLib.getDocument({data: arrayBuffer}).promise.then(pdf => {
@@ -752,11 +807,20 @@ function loadPDF(arrayBuffer) {
 function renderPDFPage(pageNum) {
   showLoading();
   pdfDoc.getPage(pageNum).then(page => {
-    const vp = page.getViewport({scale: getScale()});
+    const dpr = window.devicePixelRatio || 1;
+    const screenScale = getScale();
+    // Render at devicePixelRatio × screenScale for crisp display
+    const renderScale = screenScale * dpr;
+    const vp = page.getViewport({scale: renderScale});
     canvas.width = vp.width;
     canvas.height = vp.height;
-    drawCanvas.width = vp.width;
+    // CSS size stays at screenScale so it fits the viewport
+    canvas.style.width  = (vp.width  / dpr) + 'px';
+    canvas.style.height = (vp.height / dpr) + 'px';
+    drawCanvas.width  = vp.width;
     drawCanvas.height = vp.height;
+    drawCanvas.style.width  = canvas.style.width;
+    drawCanvas.style.height = canvas.style.height;
     drawCtx = drawCanvas.getContext('2d');
     restoreDrawData(pageNum);
     page.render({canvasContext: ctx, viewport: vp}).promise.then(() => {
@@ -774,11 +838,20 @@ function loadImage(src) {
   clearAnnotations();
   const img = new Image();
   img.onload = () => {
-    const sc = getScale();
-    canvas.width = img.width * sc;
-    canvas.height = img.height * sc;
-    drawCanvas.width = canvas.width;
+    // Always render at native image resolution — no downscaling
+    canvas.width  = img.naturalWidth  || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    // Fit display via CSS only, keeping full native pixels in the canvas
+    const area = document.getElementById('canvas-area');
+    const maxW = area.clientWidth  - 40;
+    const maxH = area.clientHeight - 40;
+    const scaleCSS = Math.min(1, maxW / canvas.width, maxH / canvas.height);
+    canvas.style.width  = (canvas.width  * scaleCSS) + 'px';
+    canvas.style.height = (canvas.height * scaleCSS) + 'px';
+    drawCanvas.width  = canvas.width;
     drawCanvas.height = canvas.height;
+    drawCanvas.style.width  = canvas.style.width;
+    drawCanvas.style.height = canvas.style.height;
     drawCtx = drawCanvas.getContext('2d');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     showDocCanvas();
@@ -790,10 +863,12 @@ function loadImage(src) {
 
 function getScale() {
   const area = document.getElementById('canvas-area');
-  const maxW = area.clientWidth - 40;
+  const maxW = area.clientWidth  - 40;
   const maxH = area.clientHeight - 40;
   if (docType === 'pdf') {
-    return Math.min(1.5, maxW / 612, maxH / 792);
+    // Base scale to fit screen, then multiply by DPR for sharpness
+    const screenFit = Math.min(1.5, maxW / 612, maxH / 792);
+    return screenFit; // renderPDFPage multiplies by dpr separately
   }
   return 1;
 }
@@ -801,13 +876,16 @@ function getScale() {
 function showDocCanvas() {
   document.getElementById('upload-zone').style.display = 'none';
   wrapper.style.display = 'inline-block';
-  document.getElementById('download-btn').style.display = 'flex';
+  document.getElementById('download-btns').style.display = 'flex';
   document.getElementById('clear-btn').style.display = 'block';
-  annLayer.style.width = canvas.width + 'px';
-  annLayer.style.height = canvas.height + 'px';
+  // Use CSS display size (not raw pixel dimensions) so layout isn't blown out
+  const displayW = canvas.style.width  || canvas.width  + 'px';
+  const displayH = canvas.style.height || canvas.height + 'px';
+  annLayer.style.width  = displayW;
+  annLayer.style.height = displayH;
   annLayer.style.pointerEvents = 'all';
-  wrapper.style.width = canvas.width + 'px';
-  wrapper.style.height = canvas.height + 'px';
+  wrapper.style.width  = displayW;
+  wrapper.style.height = displayH;
   setupDrawEvents();
 }
 
@@ -989,6 +1067,7 @@ function switchSigTab(tab, btn) {
   document.getElementById('sig-tab-'+tab).classList.add('active');
   sigMode = tab;
   if (tab === 'draw') setTimeout(initSigCanvas, 50);
+  if (tab !== 'camera') stopCameraStream();
 }
 
 // Scan sig
@@ -1243,7 +1322,12 @@ function clearAnnotations() {
 async function downloadDoc() {
   showLoading();
   try {
-    await flattenAndDownload();
+    const merged = await buildMergedCanvas();
+    const a = document.createElement('a');
+    a.href = merged.toDataURL('image/png');
+    a.download = 'signed-document.png';
+    a.click();
+    showToast('PNG downloaded!');
   } catch(err) {
     console.error(err);
     showToast('Download failed. Try again.');
@@ -1251,26 +1335,38 @@ async function downloadDoc() {
   hideLoading();
 }
 
-async function flattenAndDownload() {
-  // Merge: doc canvas + draw canvas + annotations rendered to canvas
+// Returns the pixel ratio between canvas pixels and CSS pixels
+function getCanvasDPR() {
+  const cssW = parseFloat(canvas.style.width)  || canvas.width;
+  const cssH = parseFloat(canvas.style.height) || canvas.height;
+  // Use width ratio (should equal height ratio)
+  return canvas.width / cssW;
+}
+
+async function buildMergedCanvas() {
   const merged = document.createElement('canvas');
-  merged.width = canvas.width;
+  merged.width  = canvas.width;
   merged.height = canvas.height;
   const mctx = merged.getContext('2d');
-  
-  // 1. Doc
+
+  // 1. Doc layer (already at full canvas resolution)
   mctx.drawImage(canvas, 0, 0);
-  // 2. Drawings
+
+  // 2. Draw layer
   if (drawCtx) mctx.drawImage(drawCanvas, 0, 0);
-  // 3. Annotations (render each)
+
+  // 3. Annotations — positions are in CSS pixels, scale up to canvas pixels
+  const dpr = getCanvasDPR();
   const anns = annLayer.querySelectorAll('.annotation');
+
   for (const ann of anns) {
-    const x = parseInt(ann.style.left) || 0;
-    const y = parseInt(ann.style.top) || 0;
-    const w = ann.offsetWidth || 200;
-    const h = ann.offsetHeight || 60;
-    
-    // Sig image
+    // CSS pixel position → canvas pixel position
+    const x = (parseInt(ann.style.left) || 0) * dpr;
+    const y = (parseInt(ann.style.top)  || 0) * dpr;
+    const w = (ann.offsetWidth  || 200) * dpr;
+    const h = (ann.offsetHeight || 60)  * dpr;
+
+    // Signature image
     const img = ann.querySelector('img.sig-img');
     if (img) {
       await new Promise(res => {
@@ -1282,62 +1378,71 @@ async function flattenAndDownload() {
       });
       continue;
     }
+
     // Stamp
     const stamp = ann.querySelector('.stamp-text');
     if (stamp) {
       mctx.save();
-      mctx.translate(x + 10, y + 20);
+      mctx.translate(x + 10 * dpr, y + 20 * dpr);
       mctx.rotate(-12 * Math.PI / 180);
-      const cls = stamp.className.includes('approved') ? '#43e8a0' :
+      const col = stamp.className.includes('approved') ? '#43e8a0' :
                   stamp.className.includes('rejected') ? '#ff4466' :
-                  stamp.className.includes('review') ? '#ffd166' : '#6c63ff';
-      mctx.strokeStyle = cls; mctx.fillStyle = cls;
-      mctx.lineWidth = 3;
-      mctx.font = 'bold 22px Syne, sans-serif';
-      const sw = mctx.measureText(stamp.textContent).width + 28;
-      roundRect(mctx, 0, 0, sw, 38, 8);
+                  stamp.className.includes('review')   ? '#ffd166' : '#6c63ff';
+      mctx.strokeStyle = col; mctx.fillStyle = col;
+      mctx.lineWidth = 3 * dpr;
+      mctx.font = `bold ${22 * dpr}px Syne, sans-serif`;
+      const sw = mctx.measureText(stamp.textContent).width + 28 * dpr;
+      roundRect(mctx, 0, 0, sw, 38 * dpr, 8 * dpr);
       mctx.stroke();
-      mctx.font = 'bold 18px Syne, sans-serif';
+      mctx.font = `bold ${18 * dpr}px Syne, sans-serif`;
       mctx.textBaseline = 'middle';
-      mctx.fillText(stamp.textContent, 14, 19);
+      mctx.fillText(stamp.textContent, 14 * dpr, 19 * dpr);
       mctx.restore();
       continue;
     }
+
     // Note
     const note = ann.querySelector('.note-box');
     if (note) {
       const text = note.querySelector('textarea')?.value || note.textContent.replace('×','').trim();
       mctx.save();
-      mctx.fillStyle = 'rgba(255,213,0,0.12)';
+      mctx.fillStyle   = 'rgba(255,213,0,0.12)';
       mctx.strokeStyle = 'rgba(255,213,0,0.45)';
-      mctx.lineWidth = 1.5;
-      roundRect(mctx, x, y, Math.max(w, 140), Math.max(h, 50), 8);
+      mctx.lineWidth = 1.5 * dpr;
+      const nw = Math.max(w, 140 * dpr);
+      const nh = Math.max(h, 50 * dpr);
+      roundRect(mctx, x, y, nw, nh, 8 * dpr);
       mctx.fill(); mctx.stroke();
       mctx.fillStyle = '#ffd166';
-      mctx.font = '13px DM Sans, sans-serif';
+      mctx.font = `${13 * dpr}px DM Sans, sans-serif`;
       mctx.textBaseline = 'top';
-      wrapText(mctx, text, x+10, y+10, Math.max(w,140)-20, 18);
+      wrapText(mctx, text, x + 10 * dpr, y + 10 * dpr, nw - 20 * dpr, 18 * dpr);
       mctx.restore();
       continue;
     }
+
     // Date
     const date = ann.querySelector('.date-label');
     if (date) {
       mctx.save();
-      mctx.fillStyle = 'rgba(108,99,255,0.2)';
+      mctx.fillStyle   = 'rgba(108,99,255,0.2)';
       mctx.strokeStyle = 'rgba(108,99,255,0.5)';
-      mctx.lineWidth = 1;
-      roundRect(mctx, x, y, w+4, 28, 6);
+      mctx.lineWidth = 1 * dpr;
+      roundRect(mctx, x, y, w + 4 * dpr, 28 * dpr, 6 * dpr);
       mctx.fill(); mctx.stroke();
       mctx.fillStyle = '#e8e8f0';
-      mctx.font = '13px DM Mono, monospace';
+      mctx.font = `${13 * dpr}px DM Mono, monospace`;
       mctx.textBaseline = 'middle';
-      mctx.fillText(date.textContent, x+10, y+14);
+      mctx.fillText(date.textContent, x + 10 * dpr, y + 14 * dpr);
       mctx.restore();
     }
   }
-  
-  // Save as PNG
+
+  return merged;
+}
+
+async function flattenAndDownload() {
+  const merged = await buildMergedCanvas();
   const a = document.createElement('a');
   a.href = merged.toDataURL('image/png');
   a.download = 'signed-document.png';
@@ -1388,7 +1493,161 @@ function showToast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// Drag on upload zone
+// ── PDF DOWNLOAD ──
+async function downloadPDF() {
+  if (!canvas.width) { showToast('No document loaded.'); return; }
+  showLoading();
+  try {
+    const merged = await buildMergedCanvas();
+    const imgData = merged.toDataURL('image/jpeg', 0.97);
+    const { jsPDF } = window.jspdf;
+    const pxToMm = 25.4 / 96; // 96 DPI reference
+    const imgW = merged.width  * pxToMm;
+    const imgH = merged.height * pxToMm;
+    const orientation = imgW > imgH ? 'l' : 'p';
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: [imgW, imgH] });
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH, '', 'FAST');
+    pdf.save('signed-document.pdf');
+    showToast('PDF downloaded!');
+  } catch(err) {
+    console.error(err);
+    showToast('PDF export failed. Try PNG instead.');
+  }
+  hideLoading();
+}
+
+// ── CAMERA SCAN SIGNATURE ──
+let cameraStream = null;
+let cameraCapturedDataUrl = null;
+let facingMode = 'environment'; // rear camera by default on mobile
+let videoTrackCount = 0;
+
+async function startCamera() {
+  try {
+    // Check if multiple cameras available (for flip button)
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoCams = devices.filter(d => d.kind === 'videoinput');
+    videoTrackCount = videoCams.length;
+    if (videoTrackCount > 1) {
+      document.getElementById('flip-cam-btn').style.display = 'inline-flex';
+    }
+    await openCameraStream();
+  } catch(err) {
+    console.error(err);
+    showToast('Camera access denied or not available on this device.');
+  }
+}
+
+async function openCameraStream() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  const constraints = {
+    video: {
+      facingMode,
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    }
+  };
+  cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+  const video = document.getElementById('camera-video');
+  const camCanvas = document.getElementById('camera-canvas');
+  video.srcObject = cameraStream;
+  video.style.display = 'block';
+  camCanvas.style.display = 'none';
+  document.getElementById('camera-placeholder').style.display = 'none';
+  document.getElementById('camera-controls').style.display = 'flex';
+  document.getElementById('camera-hint').style.display = 'block';
+  document.getElementById('capture-btn').style.display = 'inline-flex';
+  document.getElementById('apply-camera-btn').style.display = 'none';
+  cameraCapturedDataUrl = null;
+}
+
+function switchCamera() {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  openCameraStream().catch(err => {
+    showToast('Could not switch camera.');
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  });
+}
+
+function captureFromCamera() {
+  const video = document.getElementById('camera-video');
+  const camCanvas = document.getElementById('camera-canvas');
+  camCanvas.width = video.videoWidth || 640;
+  camCanvas.height = video.videoHeight || 480;
+  const cctx = camCanvas.getContext('2d');
+  // Mirror if front camera
+  if (facingMode === 'user') {
+    cctx.translate(camCanvas.width, 0);
+    cctx.scale(-1, 1);
+  }
+  cctx.drawImage(video, 0, 0, camCanvas.width, camCanvas.height);
+  if (facingMode === 'user') { cctx.setTransform(1,0,0,1,0,0); }
+
+  // Auto-clean: boost contrast, remove near-white background
+  const imgData = cctx.getImageData(0, 0, camCanvas.width, camCanvas.height);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i+1], b = d[i+2];
+    const brightness = (r + g + b) / 3;
+    if (brightness > 180) {
+      // Make near-white pixels fully transparent
+      d[i+3] = 0;
+    } else {
+      // Boost dark pixels
+      const factor = Math.min(1, (255 - brightness) / 120);
+      d[i]   = Math.round(r * (1 - factor));
+      d[i+1] = Math.round(g * (1 - factor));
+      d[i+2] = Math.round(b * (1 - factor));
+      d[i+3] = Math.round(255 * factor);
+    }
+  }
+  cctx.putImageData(imgData, 0, 0);
+
+  cameraCapturedDataUrl = camCanvas.toDataURL('image/png');
+  video.style.display = 'none';
+  camCanvas.style.display = 'block';
+  document.getElementById('capture-btn').style.display = 'none';
+  document.getElementById('apply-camera-btn').style.display = 'inline-flex';
+  // Stop stream
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  showToast('Signature captured! Tap "Use This" to insert.');
+}
+
+function retakeCamera() {
+  cameraCapturedDataUrl = null;
+  document.getElementById('camera-canvas').style.display = 'none';
+  document.getElementById('apply-camera-btn').style.display = 'none';
+  openCameraStream();
+}
+
+function applyCameraCapture() {
+  if (!cameraCapturedDataUrl) { showToast('No capture yet. Tap Capture first.'); return; }
+  insertSigImage(cameraCapturedDataUrl);
+  stopCameraStream();
+  closeSigPanel();
+}
+
+function stopCameraStream() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+}
+
+// Stop camera when panel closes
+const _origClose = closeSigPanel;
+function closeSigPanel() {
+  stopCameraStream();
+  document.getElementById('camera-video').style.display = 'none';
+  document.getElementById('camera-canvas').style.display = 'none';
+  document.getElementById('camera-placeholder').style.display = 'flex';
+  document.getElementById('camera-controls').style.display = 'none';
+  document.getElementById('camera-hint').style.display = 'none';
+  cameraCapturedDataUrl = null;
+  document.getElementById('sig-panel').classList.remove('open');
+}
+
+
 const uz = document.getElementById('upload-zone');
 uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag-over'); });
 uz.addEventListener('dragleave', () => uz.classList.remove('drag-over'));
@@ -1397,7 +1656,7 @@ uz.addEventListener('drop', handleDrop);
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeSigPanel(); closeNotePanel(); closeSidebar(); }
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if(canvas.width) downloadDoc(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if(canvas.width) downloadPDF(); }
   if (e.key === 'd' && !['INPUT','TEXTAREA'].includes(e.target.tagName)) toggleDraw();
 });
 </script>
