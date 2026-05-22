@@ -248,22 +248,25 @@
 
   /* note style */
   .note-box {
-    background:rgba(255,213,0,0.10); border:1.5px solid rgba(255,213,0,0.4);
+    background:#fffbe6; border:1.5px solid rgba(184,134,11,0.6);
     border-radius:8px; padding:10px 12px; min-width:140px; min-height:50px;
     font-size:13px; line-height:1.5;
     font-family:'DM Sans',sans-serif; max-width:260px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
   }
   .note-input {
     background:transparent; border:none; outline:none; width:100%;
     color:inherit; font:inherit; resize:none; min-height:40px;
+    caret-color: #000;
   }
 
   /* date style */
   .date-label {
-    font-family:'DM Mono',monospace; font-size:13px;
-    color:#1a1a8c; background:rgba(26,26,140,0.08);
-    border:2px solid rgba(26,26,140,0.35);
-    border-radius:6px; padding:4px 10px; white-space:nowrap;
+    font-family:'DM Mono',monospace; font-size:14px;
+    color:#000000; background:none;
+    border:none; border-radius:0;
+    padding:0; white-space:nowrap;
+    display:inline-block;
   }
 
   /* ── COLOR PICKER ROWS (note/date) ── */
@@ -1338,8 +1341,8 @@ function applyNote() {
   const box = document.createElement('div');
   box.className = 'note-box';
   box.style.color = noteColor;
-  box.style.borderColor = noteColor + '66';
-  box.style.background = noteColor + '18';
+  box.style.borderColor = noteColor;
+  box.style.background = hexToLightBg(noteColor);
   box.dataset.noteColor = noteColor;
   const ta = document.createElement('textarea');
   ta.className = 'note-input'; ta.value = text; ta.rows = 2;
@@ -1354,6 +1357,22 @@ function applyNote() {
   closeNotePanel();
   document.getElementById('note-textarea').value = '';
   showToast('Note added');
+}
+
+// ── HELPERS ──
+// Returns a light pastel background color based on a hex color for visibility on white docs
+function hexToLightBg(hex) {
+  // Parse hex color
+  let r = 255, g = 255, b = 255;
+  const clean = hex.replace('#', '');
+  if (clean.length === 6) {
+    r = parseInt(clean.slice(0,2), 16);
+    g = parseInt(clean.slice(2,4), 16);
+    b = parseInt(clean.slice(4,6), 16);
+  }
+  // Mix with white at ~88% to get a light tint
+  const mix = (c) => Math.round(c * 0.15 + 255 * 0.85);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
 }
 
 // ── DATE ──
@@ -1386,9 +1405,9 @@ function addDate() {
   const label = document.createElement('div');
   label.className = 'date-label';
   label.textContent = str;
-  label.style.color = dateColor;
-  label.style.borderColor = dateColor + '66';
-  label.style.background = dateColor + '15';
+  label.style.color = '#000000';
+  label.style.borderColor = 'none';
+  label.style.background = 'none';
   label.dataset.dateColor = dateColor;
   const del = document.createElement('button');
   del.className = 'delete-handle'; del.textContent = '×';
@@ -1565,16 +1584,17 @@ async function buildMergedCanvas() {
     const note = ann.querySelector('.note-box');
     if (note) {
       const text = note.querySelector('textarea')?.value || note.textContent.replace('×','').trim();
+      const noteCol = note.dataset.noteColor || '#b8860b';
       mctx.save();
-      mctx.fillStyle   = 'rgba(255,213,0,0.12)';
-      mctx.strokeStyle = 'rgba(255,213,0,0.45)';
+      mctx.fillStyle   = '#fffbe6';
+      mctx.strokeStyle = noteCol;
       mctx.lineWidth = 1.5 * dpr;
       const nw = Math.max(w, 140 * dpr);
       const nh = Math.max(h, 50 * dpr);
       roundRect(mctx, x, y, nw, nh, 8 * dpr);
       mctx.fill(); mctx.stroke();
-      mctx.fillStyle = '#ffd166';
-      mctx.font = `${13 * dpr}px DM Sans, sans-serif`;
+      mctx.fillStyle = noteCol;
+      mctx.font = `${13 * dpr}px "DM Sans", sans-serif`;
       mctx.textBaseline = 'top';
       wrapText(mctx, text, x + 10 * dpr, y + 10 * dpr, nw - 20 * dpr, 18 * dpr);
       mctx.restore();
@@ -1585,15 +1605,10 @@ async function buildMergedCanvas() {
     const date = ann.querySelector('.date-label');
     if (date) {
       mctx.save();
-      mctx.fillStyle   = 'rgba(108,99,255,0.2)';
-      mctx.strokeStyle = 'rgba(108,99,255,0.5)';
-      mctx.lineWidth = 1 * dpr;
-      roundRect(mctx, x, y, w + 4 * dpr, 28 * dpr, 6 * dpr);
-      mctx.fill(); mctx.stroke();
-      mctx.fillStyle = '#e8e8f0';
-      mctx.font = `${13 * dpr}px DM Mono, monospace`;
+      mctx.fillStyle = '#000000';
+      mctx.font = `${14 * dpr}px "DM Mono", monospace`;
       mctx.textBaseline = 'middle';
-      mctx.fillText(date.textContent, x + 10 * dpr, y + 14 * dpr);
+      mctx.fillText(date.textContent, x, y + 14 * dpr);
       mctx.restore();
     }
   }
@@ -1705,9 +1720,9 @@ async function downloadWordDocAsPDF() {
       .annotation{position:absolute;pointer-events:none}
       .stamp-text{font-weight:800;border:3px solid currentColor;border-radius:8px;padding:6px 14px;letter-spacing:2px;text-transform:uppercase;opacity:0.85;white-space:nowrap;font-size:22px;transform:rotate(-12deg);display:inline-block;font-family:sans-serif}
       .stamp-approved{color:#2a9d60}.stamp-rejected{color:#d9334f}.stamp-review{color:#c8960a}.stamp-confidential{color:#5047cc}
-      .note-box{background:rgba(255,213,0,0.1);border:1.5px solid rgba(255,213,0,0.4);border-radius:8px;padding:10px 12px;min-width:140px;min-height:50px;font-size:13px;line-height:1.5}
+      .note-box{background:#fffbe6;border:1.5px solid rgba(184,134,11,0.7);border-radius:8px;padding:10px 12px;min-width:140px;min-height:50px;font-size:13px;line-height:1.5;box-shadow:0 2px 6px rgba(0,0,0,0.1)}
       .note-input{background:transparent;border:none;width:100%;font:inherit;resize:none;min-height:40px}
-      .date-label{font-family:monospace;font-size:13px;border:2px solid;border-radius:6px;padding:4px 10px;white-space:nowrap}
+      .date-label{font-family:monospace;font-size:14px;color:#000000;border:none;padding:0;white-space:nowrap;display:inline-block;background:none}
       .sig-img{max-width:100%;max-height:100%;object-fit:contain} .delete-handle,.resize-handle{display:none}
     </style>
   </head><body><div class="page">${content}<div class="ann-layer">${annHTML}</div></div>
